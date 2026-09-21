@@ -1,0 +1,48 @@
+/* Admin page styles */
+
+.admin-section {
+  margin-bottom: 24px;
+}
+
+.admin-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+
+.admin-item-info {
+  flex: 1;
+}
+
+.admin-item-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.admin-item-detail {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.admin-item-actions {
+  display: flex;
+  gap: 8px;
+}

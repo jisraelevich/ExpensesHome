@@ -1,0 +1,476 @@
+/* ========== APP LAYOUT ========== */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* ========== MONTH NAVIGATION ========== */
+.month-navigation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.month-nav-btn {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.month-nav-btn:hover {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+.month-nav-btn.btn-today {
+  background-color: rgba(255, 215, 0, 0.3);
+  border: 1px solid rgba(255, 215, 0, 0.6);
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.month-nav-btn.btn-today:hover {
+  background-color: rgba(255, 215, 0, 0.5);
+}
+
+.month-selector {
+  display: flex;
+  align-items: center;
+}
+
+.month-selector input[type="month"] {
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  min-width: 140px;
+}
+
+.month-selector input[type="month"]:hover,
+.month-selector input[type="month"]:focus {
+  outline: none;
+  background-color: white;
+  border-color: white;
+}
+
+/* ========== HEADER RIGHT SECTION ========== */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.header-user-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.user-email {
+  font-size: 11px;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+/* Settings button in header */
+.header-user-section .nav-tab {
+  padding: 6px 12px;
+  color: white;
+  border-bottom: none;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  margin: 0;
+}
+
+.header-user-section .nav-tab:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.header-user-section .nav-tab.active {
+  background-color: rgba(255, 255, 255, 0.35);
+  color: white;
+}
+
+/* ========== NAVIGATION ========== */
+.app-nav {
+  background-color: white;
+  border-bottom: 1px solid #eee;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: sticky;
+  top: 64px;
+  z-index: 99;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 0;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.nav-tab {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.nav-tab:hover {
+  color: #333;
+  background-color: #f9f9f9;
+}
+
+.nav-tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+.tab-icon {
+  font-size: 16px;
+}
+
+/* ========== MOBILE RESPONSIVE NAV ========== */
+@media (max-width: 768px) {
+  .nav-tab {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .tab-label {
+    display: none;
+  }
+
+  .nav-tab.active .tab-label {
+    display: none;
+  }
+
+  .header-content {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .header-right {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .month-navigation {
+    width: 100%;
+  }
+
+  .header-user-section {
+    width: 100%;
+    flex-direction: column;
+    text-align: left;
+  }
+
+  .user-info {
+    text-align: left;
+  }
+
+  .app-header h1 {
+    font-size: 20px;
+  }
+}
+
+/* ========== MAIN CONTENT ========== */
+.app-main {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 20px 16px;
+}
+
+/* ========== FOOTER ========== */
+.app-footer {
+  background-color: #f8f9fa;
+  border-top: 1px solid #eee;
+  padding: 20px 16px;
+  text-align: center;
+  color: #666;
+  font-size: 12px;
+  margin-top: 40px;
+}
+
+.app-footer p {
+  margin: 0;
+}
+
+/* ========== LOADING STATE ========== */
+.app-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========== ERROR STATE ========== */
+.app-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+  padding: 20px;
+  text-align: center;
+}
+
+.app-error h2 {
+  color: #dc3545;
+  margin: 0;
+}
+
+.app-error p {
+  color: #666;
+  margin: 0;
+}
+
+/* ========== PAGE CONTAINER ========== */
+.page {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+}
+
+.page-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ========== CARDS ========== */
+.card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card-header {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.card-content {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ========== STATS ========== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+  justify-content: center;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.stat-card {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.stat-card-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-card-change {
+  font-size: 12px;
+  margin-top: 4px;
+  color: #999;
+}
+
+.stat-card-change.positive {
+  color: #28a745;
+}
+
+.stat-card-change.negative {
+  color: #dc3545;
+}
+
+/* ========== FORM LAYOUT ========== */
+.form-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 16px;
+  }
+
+  .app-header h1 {
+    font-size: 20px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .month-navigation {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .month-selector input[type="month"] {
+    flex: 1;
+    min-width: auto;
+  }
+
+  .app-main {
+    padding: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+
+  .form-layout {
+    grid-template-columns: 1fr;
+  }
+}
