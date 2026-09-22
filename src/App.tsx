@@ -8,7 +8,6 @@ import './App.css';
 import DashboardPage from './pages/Dashboard';
 import CreditCardsPage from './pages/CreditCards';
 import InvestmentsPage from './pages/Investments';
-import CarSavingsPage from './pages/CarSavings';
 import DollarRatesPage from './pages/DollarRates';
 import ServicesPage from './pages/Services';
 import DebtsPage from './pages/Debts';
@@ -137,7 +136,6 @@ function App() {
         {currentTab === 'dashboard' && <DashboardPage data={data} month={selectedMonth} />}
         {currentTab === 'creditCards' && <CreditCardsPage month={selectedMonth} onRefresh={refreshData} />}
         {currentTab === 'investments' && <InvestmentsPage month={selectedMonth} onRefresh={refreshData} />}
-        {currentTab === 'carSavings' && <CarSavingsPage month={selectedMonth} onRefresh={refreshData} />}
         {currentTab === 'dollarRates' && <DollarRatesPage month={selectedMonth} onRefresh={refreshData} />}
         {currentTab === 'services' && <ServicesPage month={selectedMonth} onRefresh={refreshData} />}
         {currentTab === 'debts' && <DebtsPage month={selectedMonth} onRefresh={refreshData} />}

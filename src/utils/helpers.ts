@@ -198,3 +198,30 @@ export function isValidEmail(email: string): boolean {
 export function isValidNumber(value: any): boolean {
   return !isNaN(value) && value !== '' && value !== null && value !== undefined;
 }
+
+/**
+ * Format number with thousands separator for display (e.g., 1000.50 → "1,000.50")
+ */
+export function formatMoneyInput(value: number | string): string {
+  if (!value && value !== 0) return '';
+  const num = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
+  if (isNaN(num)) return '';
+  
+  const parts = num.toFixed(2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
+
+/**
+ * Parse money input (remove thousands separator and convert to number)
+ * Supports both dot (.) and comma (,) as decimal separators
+ */
+export function parseMoneyInput(value: string): number {
+  if (!value) return 0;
+  // Replace comma with dot for decimal separator (European format support)
+  let cleaned = value.replace(',', '.');
+  // Remove any remaining commas (thousands separators)
+  cleaned = cleaned.replace(/,/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}

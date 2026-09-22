@@ -27,9 +27,14 @@ export interface CreditCardMonthly {
 // ========== INVESTMENT - BASE ==========
 export interface Investment {
   id: string;
-  broker: string;
-  type: 'insurance' | 'investment' | 'retirement' | 'other';
-  year: number;
+  name: string; // e.g., "Vida Seguros Life Insurance", "Car Payment - Toyota"
+  broker?: string; // Company name
+  type: 'insurance-life' | 'insurance-other' | 'investment' | 'retirement' | 'payment-plan' | 'car' | 'other';
+  currency: 'ARS' | 'USD';
+  totalPayments: number; // e.g., 20, 120
+  startMonth: string; // 'YYYY-MM' when this started
+  startDate: string; // 'YYYY-MM-DD' exact start date
+  endDate?: string; // 'YYYY-MM-DD' optional end date
   isActive: boolean; // Can be hidden/archived
   notes?: string;
   createdAt: string;
@@ -41,9 +46,8 @@ export interface InvestmentMonthly {
   id: string;
   investmentId: string; // Link to Investment
   month: string; // 'YYYY-MM'
-  currentPaymentNumber: number;
-  totalPayments: number;
-  amountPerPayment: number;
+  currentPaymentNumber: number; // Auto-calculated: months elapsed from startMonth + 1
+  amountPerPayment: number; // Amount for THIS month (can vary for inflation)
   isPaid: boolean;
   paidDate?: string;
   comment?: string;
@@ -92,19 +96,46 @@ export interface Service {
   updatedAt: string;
 }
 
-// ========== DEBTS TABLE ==========
+// ========== DEBT - BASE (Admin card only) ==========
 export interface Debt {
   id: string;
-  description: string;
-  currentPaymentNumber: number;
-  maxPaymentNumber: number; // 0 = applies all months, 1 = one payment only, >1 = specific months
-  amountPerPayment: number;
-  month: string; // 'YYYY-MM'
-  isPaid: boolean;
-  paidDate?: string;
-  notes?: string;
+  name: string; // e.g., "Car Loan", "Personal Loan"
+  isActive: boolean; // Can be hidden/archived
   createdAt: string;
   updatedAt: string;
+}
+
+// ========== DEBT - SUB-PAYMENT (invoice line items) ==========
+export interface DebtSubpayment {
+  id: string;
+  debtId: string; // Link to Debt
+  description: string; // e.g., "Principal", "Interest", "Fees"
+  paymentNumber: number; // Which payment # starts this sub-payment (e.g., 1 = from first payment)
+  initialValue: number; // Starting amount for this sub-payment
+  startDate: string; // 'YYYY-MM-DD' when this sub-payment starts
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ========== DEBT - MONTHLY VARIATION ==========
+export interface DebtMonthly {
+  id: string;
+  debtId: string; // Link to Debt
+  month: string; // 'YYYY-MM'
+  currentPaymentNumber: number; // Auto-calculated: which payment # is this month
+  subpayments: DebtMonthlySubpayment[]; // Array of sub-payments for this month
+  isPaid: boolean; // Is entire debt payment for this month paid?
+  paidDate?: string; // 'YYYY-MM-DD'
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ========== DEBT - MONTHLY SUB-PAYMENT DATA ==========
+export interface DebtMonthlySubpayment {
+  subpaymentId: string; // Link to DebtSubpayment
+  amount: number; // Amount for THIS month (can be changed in tab)
+  isPaid: boolean; // Is this sub-payment paid?
+  paidDate?: string; // 'YYYY-MM-DD'
 }
 
 // ========== EXPENSES TABLE ==========

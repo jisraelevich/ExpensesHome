@@ -53,6 +53,7 @@ export default function CreditCardBaseForm({ onSave, onCancel, initialData }: Cr
             className="input-field"
             value={formData.bankName || ''}
             onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="e.g., Banco Santander"
             required
             style={{ padding: '6px 8px', fontSize: '13px', width: '100%' }}
@@ -82,6 +83,7 @@ export default function CreditCardBaseForm({ onSave, onCancel, initialData }: Cr
             className="input-field"
             value={formData.notes || ''}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="Optional notes"
             style={{ padding: '6px 8px', fontSize: '13px', width: '100%' }}
           />

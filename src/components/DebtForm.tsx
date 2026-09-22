@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Debt } from '../types';
-import { generateId, getCurrentDate } from '../utils/helpers';
+import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
 import './forms.css';
 
 interface DebtFormProps {
@@ -59,6 +59,7 @@ export default function DebtForm({ month, onSave, onCancel, initialData }: DebtF
             className="input-field"
             value={formData.description || ''}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="e.g., Personal Loan - Bank A"
             required
           />
@@ -72,6 +73,7 @@ export default function DebtForm({ month, onSave, onCancel, initialData }: DebtF
             className="input-field"
             value={formData.currentPaymentNumber || 1}
             onChange={(e) => setFormData({ ...formData, currentPaymentNumber: parseInt(e.target.value) })}
+            onFocus={(e) => e.target.select()}
             required
           />
         </div>
@@ -84,6 +86,7 @@ export default function DebtForm({ month, onSave, onCancel, initialData }: DebtF
             className="input-field"
             value={formData.maxPaymentNumber || 0}
             onChange={(e) => setFormData({ ...formData, maxPaymentNumber: parseInt(e.target.value) })}
+            onFocus={(e) => e.target.select()}
             required
           />
           <small style={{ color: '#999' }}>0 = applies all months, 1 = one-time, n = specific months</small>
@@ -92,11 +95,12 @@ export default function DebtForm({ month, onSave, onCancel, initialData }: DebtF
         <div className="form-group">
           <label>Amount per Payment *</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className="input-field"
-            value={formData.amountPerPayment || 0}
-            onChange={(e) => setFormData({ ...formData, amountPerPayment: parseFloat(e.target.value) })}
+            value={formatMoneyInput(formData.amountPerPayment || 0)}
+            onChange={(e) => setFormData({ ...formData, amountPerPayment: parseMoneyInput(e.target.value) })}
+            onFocus={(e) => e.target.select()}
             placeholder="0.00"
             required
           />
@@ -121,6 +125,7 @@ export default function DebtForm({ month, onSave, onCancel, initialData }: DebtF
               className="input-field"
               value={formData.paidDate || ''}
               onChange={(e) => setFormData({ ...formData, paidDate: e.target.value })}
+              onFocus={(e) => e.target.select()}
             />
           </div>
         )}
@@ -131,6 +136,7 @@ export default function DebtForm({ month, onSave, onCancel, initialData }: DebtF
             className="input-field"
             value={formData.notes || ''}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="e.g., 24-month plan, interest rate..."
             rows={2}
           />

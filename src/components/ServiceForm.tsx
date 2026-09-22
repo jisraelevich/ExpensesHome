@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Service } from '../types';
-import { generateId, getCurrentDate } from '../utils/helpers';
+import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
 import './forms.css';
 
 interface ServiceFormProps {
@@ -78,6 +78,7 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
             className="input-field"
             value={formData.description || ''}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="e.g., Monthly Bill"
             required
           />
@@ -90,6 +91,7 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
             className="input-field"
             value={formData.dueDate || `${month}-15`}
             onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+            onFocus={(e) => e.target.select()}
             required
           />
         </div>
@@ -97,11 +99,12 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
         <div className="form-group">
           <label>Amount (Pesos) *</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className="input-field"
-            value={formData.amountPesos || 0}
-            onChange={(e) => setFormData({ ...formData, amountPesos: parseFloat(e.target.value) })}
+            value={formatMoneyInput(formData.amountPesos || 0)}
+            onChange={(e) => setFormData({ ...formData, amountPesos: parseMoneyInput(e.target.value) })}
+            onFocus={(e) => e.target.select()}
             placeholder="0.00"
             required
           />
@@ -110,11 +113,12 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
         <div className="form-group">
           <label>Amount (Dollars)</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className="input-field"
-            value={formData.amountDollars || 0}
-            onChange={(e) => setFormData({ ...formData, amountDollars: parseFloat(e.target.value) })}
+            value={formatMoneyInput(formData.amountDollars || 0)}
+            onChange={(e) => setFormData({ ...formData, amountDollars: parseMoneyInput(e.target.value) })}
+            onFocus={(e) => e.target.select()}
             placeholder="0.00"
           />
         </div>
@@ -138,6 +142,7 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
               className="input-field"
               value={formData.paidDate || ''}
               onChange={(e) => setFormData({ ...formData, paidDate: e.target.value })}
+              onFocus={(e) => e.target.select()}
             />
           </div>
         )}
@@ -148,6 +153,7 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
             className="input-field"
             value={formData.notes || ''}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="Optional notes"
             rows={2}
           />

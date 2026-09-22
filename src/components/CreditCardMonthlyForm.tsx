@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CreditCard, CreditCardMonthly } from '../types';
-import { generateId, getCurrentDate } from '../utils/helpers';
+import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
 import './forms.css';
 
 interface CreditCardMonthlyFormProps {
@@ -74,11 +74,11 @@ export default function CreditCardMonthlyForm({
         <div>
           <label style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Amount (ARS) *</label>
           <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.amountPesos || 0}
-            onChange={(e) => setFormData({ ...formData, amountPesos: parseFloat(e.target.value) })}
+            type="text"
+            inputMode="decimal"
+            className="money-input"
+            value={formatMoneyInput(formData.amountPesos || 0)}
+            onChange={(e) => setFormData({ ...formData, amountPesos: parseMoneyInput(e.target.value) })}
             onFocus={(e) => e.target.select()}
             required
             placeholder="0.00"
@@ -89,17 +89,16 @@ export default function CreditCardMonthlyForm({
               border: '1px solid #ddd',
               borderRadius: '4px'
             }}
-            className="money-input"
           />
         </div>
         <div>
           <label style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Amount (USD) *</label>
           <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.amountDollars || 0}
-            onChange={(e) => setFormData({ ...formData, amountDollars: parseFloat(e.target.value) })}
+            type="text"
+            inputMode="decimal"
+            className="money-input"
+            value={formatMoneyInput(formData.amountDollars || 0)}
+            onChange={(e) => setFormData({ ...formData, amountDollars: parseMoneyInput(e.target.value) })}
             onFocus={(e) => e.target.select()}
             required
             placeholder="0.00"

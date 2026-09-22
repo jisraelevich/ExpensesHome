@@ -2,16 +2,19 @@ import React, { useState } from 'react';
 import { useTable, useAuth } from '../hooks';
 import { CreditCard, Investment } from '../types';
 import CreditCardBaseForm from '../components/CreditCardBaseForm';
+import InvestmentBaseForm from '../components/InvestmentBaseForm';
 import Modal from '../components/Modal';
 import LoginForm from '../components/LoginForm';
 import './admin.css';
 
 export default function AdminPage() {
   const { items: creditCards, addItem: addCard, updateItem: updateCard } = useTable<CreditCard>('creditCards');
-  const { items: investments } = useTable<Investment>('investments');
+  const { items: investments, addItem: addInvestment, updateItem: updateInvestment } = useTable<Investment>('investments');
   const { user } = useAuth();
   const [showCardForm, setShowCardForm] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | undefined>();
+  const [showInvestmentForm, setShowInvestmentForm] = useState(false);
+  const [editingInvestment, setEditingInvestment] = useState<Investment | undefined>();
 
   const handleSaveCard = async (card: CreditCard) => {
     try {
@@ -33,6 +36,29 @@ export default function AdminPage() {
       await updateCard(card.id, { isActive: !card.isActive });
     } catch (error) {
       console.error('Error toggling card:', error);
+    }
+  };
+
+  const handleSaveInvestment = async (investment: Investment) => {
+    try {
+      const existing = investments.find((inv) => inv.id === investment.id);
+      if (existing) {
+        await updateInvestment(investment.id, investment);
+      } else {
+        await addInvestment(investment);
+      }
+      setShowInvestmentForm(false);
+      setEditingInvestment(undefined);
+    } catch (error) {
+      console.error('Error saving investment:', error);
+    }
+  };
+
+  const toggleInvestmentStatus = async (investment: Investment) => {
+    try {
+      await updateInvestment(investment.id, { isActive: !investment.isActive });
+    } catch (error) {
+      console.error('Error toggling investment:', error);
     }
   };
 
@@ -149,12 +175,114 @@ export default function AdminPage() {
 
       {/* INVESTMENTS MANAGEMENT */}
       <div className="card">
-        <div className="card-header">
-          <h3>📈 Investments</h3>
-          <small style={{ color: '#999' }}>Coming soon</small>
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>📈 Investments & Insurance</h3>
+          <button
+            className="button button-primary"
+            onClick={() => {
+              setEditingInvestment(undefined);
+              setShowInvestmentForm(true);
+            }}
+          >
+            + Add Investment
+          </button>
         </div>
-        <p style={{ color: '#999', textAlign: 'center' }}>Investment management interface coming soon...</p>
+
+        {investments.length === 0 ? (
+          <p style={{ color: '#999', textAlign: 'center' }}>No investments yet</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
+            {investments.map((investment) => (
+              <div 
+                key={investment.id} 
+                style={{
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  background: investment.isActive ? '#fff' : '#f9f9f9',
+                  opacity: investment.isActive ? 1 : 0.7,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <div>
+                  <strong style={{ fontSize: '13px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {investment.name}
+                  </strong>
+                  <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+                    {investment.type === 'insurance-life' && '🛡️ Life Insurance'}
+                    {investment.type === 'insurance-other' && '🛡️ Other Insurance'}
+                    {investment.type === 'investment' && '📈 Investment'}
+                    {investment.type === 'retirement' && '🏦 Retirement'}
+                    {investment.type === 'payment-plan' && '💳 Payment Plan'}
+                    {investment.type === 'car' && '🚗 Car'}
+                    {investment.type === 'other' && '📌 Other'}
+                  </div>
+                </div>
+                
+                <div style={{ fontSize: '11px', color: '#666', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                  <div><strong>Currency:</strong> {investment.currency}</div>
+                  <div><strong>Payments:</strong> {investment.totalPayments}</div>
+                  <div><strong>Starts:</strong> {investment.startDate}</div>
+                </div>
+                
+                {investment.broker && (
+                  <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic' }}>
+                    {investment.broker}
+                  </div>
+                )}
+                
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center', paddingTop: '2px' }}>
+                  <span className={`badge badge-${investment.isActive ? 'success' : 'warning'}`} style={{ fontSize: '10px' }}>
+                    {investment.isActive ? 'Active' : 'Hidden'}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '6px', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #eee' }}>
+                  <button
+                    className="button button-secondary"
+                    style={{ fontSize: '10px', padding: '4px 6px', flex: 1 }}
+                    onClick={() => {
+                      setEditingInvestment(investment);
+                      setShowInvestmentForm(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className={`button ${investment.isActive ? 'button-secondary' : 'button-primary'}`}
+                    style={{ fontSize: '10px', padding: '4px 6px', flex: 1 }}
+                    onClick={() => toggleInvestmentStatus(investment)}
+                  >
+                    {investment.isActive ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Modal for Add/Edit Investment Form */}
+      <Modal
+        isOpen={showInvestmentForm}
+        title={editingInvestment ? 'Edit Investment' : 'Add New Investment'}
+        onClose={() => {
+          setShowInvestmentForm(false);
+          setEditingInvestment(undefined);
+        }}
+        size="medium"
+      >
+        <InvestmentBaseForm
+          onSave={handleSaveInvestment}
+          onCancel={() => {
+            setShowInvestmentForm(false);
+            setEditingInvestment(undefined);
+          }}
+          initialData={editingInvestment}
+        />
+      </Modal>
 
       {/* APP INFO */}
       <div className="card">

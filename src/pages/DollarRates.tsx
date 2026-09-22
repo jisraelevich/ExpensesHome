@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTable } from '../hooks';
 import { DollarRate } from '../types';
-import { generateId, getCurrentDate } from '../utils/helpers';
+import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
 
 interface DollarRatesPageProps {
   month: string;
@@ -105,22 +105,24 @@ export default function DollarRatesPage({ month, onRefresh }: DollarRatesPagePro
             <div className="form-group">
               <label>MEP Rate</label>
               <input
-                type="number"
-                step="0.01"
-                className="input-field"
-                value={formData.mepValue}
-                onChange={(e) => setFormData({ ...formData, mepValue: parseFloat(e.target.value) })}
+                type="text"
+                inputMode="decimal"
+                className="money-input"
+                value={formatMoneyInput(formData.mepValue)}
+                onChange={(e) => setFormData({ ...formData, mepValue: parseMoneyInput(e.target.value) })}
+                onFocus={(e) => e.target.select()}
                 required
               />
             </div>
             <div className="form-group">
               <label>Correction Value</label>
               <input
-                type="number"
-                step="0.01"
-                className="input-field"
-                value={formData.correctionValue}
-                onChange={(e) => setFormData({ ...formData, correctionValue: parseFloat(e.target.value) })}
+                type="text"
+                inputMode="decimal"
+                className="money-input"
+                value={formatMoneyInput(formData.correctionValue)}
+                onChange={(e) => setFormData({ ...formData, correctionValue: parseMoneyInput(e.target.value) })}
+                onFocus={(e) => e.target.select()}
               />
             </div>
             <div className="form-group">
@@ -130,6 +132,7 @@ export default function DollarRatesPage({ month, onRefresh }: DollarRatesPagePro
                 className="input-field"
                 value={formData.source}
                 onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                onFocus={(e) => e.target.select()}
               />
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '8px' }}>

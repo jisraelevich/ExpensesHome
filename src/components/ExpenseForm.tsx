@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Expense } from '../types';
-import { generateId, getCurrentDate } from '../utils/helpers';
+import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
 import './forms.css';
 
 interface ExpenseFormProps {
@@ -70,6 +70,7 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
             className="input-field"
             value={formData.description || ''}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="e.g., Groceries, Gas, Dinner"
             required
           />
@@ -78,11 +79,12 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
         <div className="form-group">
           <label>Amount (Pesos) *</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className="input-field"
-            value={formData.amountPesos || 0}
-            onChange={(e) => handlePesosChange(parseFloat(e.target.value))}
+            value={formatMoneyInput(formData.amountPesos || 0)}
+            onChange={(e) => handlePesosChange(parseMoneyInput(e.target.value))}
+            onFocus={(e) => e.target.select()}
             placeholder="0.00"
             required
           />
@@ -91,11 +93,12 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
         <div className="form-group">
           <label>Amount (Dollars)</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className="input-field"
-            value={formData.amountDollars || 0}
-            onChange={(e) => setFormData({ ...formData, amountDollars: parseFloat(e.target.value) })}
+            value={formatMoneyInput(formData.amountDollars || 0)}
+            onChange={(e) => setFormData({ ...formData, amountDollars: parseMoneyInput(e.target.value) })}
+            onFocus={(e) => e.target.select()}
             placeholder="0.00"
           />
           <small style={{ color: '#999' }}>Auto-calculated from pesos at ${dollarRate.toFixed(2)}</small>
@@ -108,6 +111,7 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
             className="input-field"
             value={formData.category || ''}
             onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="e.g., Food, Transport, Entertainment"
           />
         </div>
@@ -146,6 +150,7 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
             className="input-field"
             value={formData.notes || ''}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="Optional notes"
             rows={2}
           />
