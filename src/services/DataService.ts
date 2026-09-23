@@ -513,6 +513,68 @@ class DataService {
       });
     }
   }
+
+  /**
+   * Get latest exchange rate (ARS/USD)
+   * Used globally across app for currency conversions
+   * TODO: Future - support different rates per month/year
+   */
+  public static async getLatestExchangeRate(): Promise<DollarRate | null> {
+    try {
+      const data = await this.loadAllData();
+      if (!data.dollarRates || data.dollarRates.length === 0) {
+        // Return default rate if none exists
+        return {
+          id: 'default',
+          date: this.getCurrentDate(),
+          mepValue: 210.5,
+          correctionValue: 0,
+          realValue: 210.5,
+          source: 'Default Rate',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      // Return the most recent rate (last in array)
+      return data.dollarRates[data.dollarRates.length - 1];
+    } catch (error) {
+      console.error('Error getting exchange rate:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Ensure a default exchange rate exists (for initial setup)
+   */
+  public static async ensureExchangeRate(): Promise<DollarRate> {
+    try {
+      const data = await this.loadAllData();
+      
+      // If we have rates, return the latest
+      if (data.dollarRates && data.dollarRates.length > 0) {
+        return data.dollarRates[data.dollarRates.length - 1];
+      }
+
+      // Create default rate
+      const defaultRate: DollarRate = {
+        id: 'default-' + Date.now(),
+        date: this.getCurrentDate(),
+        mepValue: 210.5,
+        correctionValue: 0,
+        realValue: 210.5,
+        source: 'Default Rate',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      data.dollarRates.push(defaultRate);
+      await this.saveAllData(data);
+      return defaultRate;
+    } catch (error) {
+      console.error('Error ensuring exchange rate:', error);
+      throw error;
+    }
+  }
 }
 
 export default DataService;

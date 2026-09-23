@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTable, useCurrentMonth } from '../hooks';
 import { CreditCard, CreditCardMonthly, Investment, InvestmentMonthly, Service, Debt, DebtMonthly, Expense, DollarRate } from '../types';
 import { StorageData } from '../types';
 import { formatCurrency, formatDate, getMonthName } from '../utils/helpers';
 import BackupManager from '../components/BackupManager';
+import DataService from '../services/DataService';
 
 interface DashboardPageProps {
   data: StorageData;
@@ -12,6 +13,7 @@ interface DashboardPageProps {
 
 export default function DashboardPage({ data, month }: DashboardPageProps) {
   const [showBackupManager, setShowBackupManager] = useState(false);
+  const [latestRate, setLatestRate] = useState<DollarRate | null>(null);
   const { items: creditCards } = useTable<CreditCard>('creditCards');
   const { items: creditCardsMonthly } = useTable<CreditCardMonthly>('creditCardsMonthly');
   const { items: investments } = useTable<Investment>('investments');
@@ -21,6 +23,27 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
   const { items: services } = useTable<Service>('services');
   const { items: expenses } = useTable<Expense>('expenses');
   const { items: dollarRates } = useTable<DollarRate>('dollarRates');
+
+  // Ensure exchange rate exists on mount
+  useEffect(() => {
+    const initializeRate = async () => {
+      // First ensure a default rate exists if none
+      await DataService.ensureExchangeRate();
+      
+      // Get the latest rate
+      const rate = await DataService.getLatestExchangeRate();
+      setLatestRate(rate);
+    };
+
+    initializeRate();
+  }, []);
+
+  // Update rate when dollarRates changes
+  useEffect(() => {
+    if (dollarRates && dollarRates.length > 0) {
+      setLatestRate(dollarRates[dollarRates.length - 1]);
+    }
+  }, [dollarRates]);
 
   // Filter by current month (matrix structure)
   const currentMonthCC = creditCardsMonthly.filter((ccm) => ccm.month === month && creditCards.find(cc => cc.id === ccm.creditCardId && cc.isActive));
@@ -36,11 +59,6 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
   const totalSvc = currentMonthSvc.reduce((sum, svc) => sum + svc.amountPesos, 0);
   const totalExp = currentMonthExp.reduce((sum, exp) => sum + exp.amountPesos, 0);
   const grandTotal = totalCC + totalInv + totalDebt + totalSvc + totalExp;
-
-  // Get latest dollar rate
-  const latestRate = dollarRates && dollarRates.length > 0
-    ? dollarRates[dollarRates.length - 1]
-    : null;
 
   const totalInDollars = latestRate ? grandTotal / latestRate.realValue : 0;
 
