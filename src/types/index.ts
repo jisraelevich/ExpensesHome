@@ -110,9 +110,11 @@ export interface DebtSubpayment {
   id: string;
   debtId: string; // Link to Debt
   description: string; // e.g., "Principal", "Interest", "Fees"
-  paymentNumber: number; // Which payment # starts this sub-payment (e.g., 1 = from first payment)
-  initialValue: number; // Starting amount for this sub-payment
-  startDate: string; // 'YYYY-MM-DD' when this sub-payment starts
+  startDate: string; // 'YYYY-MM-DD' when this line item starts
+  amountARS: number; // ARS amount
+  amountUSD: number; // USD amount
+  totalPayments: number; // How many months this appears (0 = permanent/unlimited, 1 = this month only, 24 = appears 24 months)
+  isActive: boolean; // Can toggle on/off in admin
   createdAt: string;
   updatedAt: string;
 }
@@ -122,8 +124,7 @@ export interface DebtMonthly {
   id: string;
   debtId: string; // Link to Debt
   month: string; // 'YYYY-MM'
-  currentPaymentNumber: number; // Auto-calculated: which payment # is this month
-  subpayments: DebtMonthlySubpayment[]; // Array of sub-payments for this month
+  subpayments: DebtMonthlySubpayment[]; // Array of active sub-payments for this month (auto-filtered by visibility rules)
   isPaid: boolean; // Is entire debt payment for this month paid?
   paidDate?: string; // 'YYYY-MM-DD'
   createdAt: string;
@@ -133,7 +134,9 @@ export interface DebtMonthly {
 // ========== DEBT - MONTHLY SUB-PAYMENT DATA ==========
 export interface DebtMonthlySubpayment {
   subpaymentId: string; // Link to DebtSubpayment
-  amount: number; // Amount for THIS month (can be changed in tab)
+  description: string; // Cached from DebtSubpayment for easy display
+  amountARS: number; // Amount for THIS month (can be changed in tab)
+  amountUSD: number; // USD amount for THIS month
   isPaid: boolean; // Is this sub-payment paid?
   paidDate?: string; // 'YYYY-MM-DD'
 }

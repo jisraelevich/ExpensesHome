@@ -575,6 +575,57 @@ class DataService {
       throw error;
     }
   }
+
+  /**
+   * Check if a debt sub-payment is visible in a given month
+   * Visibility rules:
+   * - totalPayments = 0: permanent (always visible from startDate onwards)
+   * - totalPayments = 1: only visible in the month it starts
+   * - totalPayments > 1: visible for that many months from startDate
+   */
+  public static isSubpaymentVisibleInMonth(subpayment: DebtSubpayment, targetMonth: string): boolean {
+    const [startYear, startMonth] = subpayment.startDate.split('-').slice(0, 2).map(Number);
+    const [targetYear, targetMonthNum] = targetMonth.split('-').map(Number);
+
+    // Calculate months between start and target
+    const monthsDiff = (targetYear - startYear) * 12 + (targetMonthNum - startMonth);
+
+    // If target month is before start date, not visible
+    if (monthsDiff < 0) {
+      return false;
+    }
+
+    // If totalPayments = 0, always visible (permanent)
+    if (subpayment.totalPayments === 0) {
+      return true;
+    }
+
+    // If totalPayments = 1, only visible in the start month
+    if (subpayment.totalPayments === 1) {
+      return monthsDiff === 0;
+    }
+
+    // If totalPayments > 1, visible until that many months have passed
+    return monthsDiff < subpayment.totalPayments;
+  }
+
+  /**
+   * Get visible sub-payments for a debt in a given month
+   */
+  public static async getVisibleSubpaymentsForMonth(
+    debtId: string,
+    month: string
+  ): Promise<DebtSubpayment[]> {
+    try {
+      const data = await this.loadAllData();
+      const debtSubpayments = data.debtSubpayments.filter((sp: DebtSubpayment) => sp.debtId === debtId && sp.isActive);
+
+      return debtSubpayments.filter((sp: DebtSubpayment) => this.isSubpaymentVisibleInMonth(sp, month));
+    } catch (error) {
+      console.error('Error getting visible subpayments:', error);
+      return [];
+    }
+  }
 }
 
 export default DataService;

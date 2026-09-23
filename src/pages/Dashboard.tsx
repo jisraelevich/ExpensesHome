@@ -55,7 +55,7 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
   // Calculate totals
   const totalCC = currentMonthCC.reduce((sum, ccm) => sum + ccm.amountPesos, 0);
   const totalInv = currentMonthInv.reduce((sum, im) => sum + im.amountPerPayment, 0);
-  const totalDebt = currentMonthDebt.reduce((sum, dm) => sum + dm.subpayments.reduce((s, sp) => s + sp.amount, 0), 0);
+  const totalDebt = currentMonthDebt.reduce((sum, dm) => sum + dm.subpayments.reduce((s, sp) => s + sp.amountARS, 0), 0);
   const totalSvc = currentMonthSvc.reduce((sum, svc) => sum + svc.amountPesos, 0);
   const totalExp = currentMonthExp.reduce((sum, exp) => sum + exp.amountPesos, 0);
   const grandTotal = totalCC + totalInv + totalDebt + totalSvc + totalExp;

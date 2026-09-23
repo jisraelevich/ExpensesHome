@@ -174,9 +174,11 @@ export function generateSampleDebtSubpayments(debts: Debt[]): DebtSubpayment[] {
       id: generateId(),
       debtId,
       description: 'Principal',
-      paymentNumber: 1,
-      initialValue: 1500,
       startDate: '2026-01-01',
+      amountARS: 1500,
+      amountUSD: 7.50,
+      totalPayments: 24, // Appears for 24 months, then disappears
+      isActive: true,
       createdAt: getCurrentDate(),
       updatedAt: getCurrentDate(),
     },
@@ -184,9 +186,11 @@ export function generateSampleDebtSubpayments(debts: Debt[]): DebtSubpayment[] {
       id: generateId(),
       debtId,
       description: 'Interest',
-      paymentNumber: 1,
-      initialValue: 400,
       startDate: '2026-01-01',
+      amountARS: 400,
+      amountUSD: 2.00,
+      totalPayments: 0, // Permanent (0 = unlimited)
+      isActive: true,
       createdAt: getCurrentDate(),
       updatedAt: getCurrentDate(),
     },
@@ -194,9 +198,11 @@ export function generateSampleDebtSubpayments(debts: Debt[]): DebtSubpayment[] {
       id: generateId(),
       debtId,
       description: 'Insurance',
-      paymentNumber: 1,
-      initialValue: 100,
-      startDate: '2026-01-01',
+      startDate: '2026-09-01',
+      amountARS: 100,
+      amountUSD: 0.50,
+      totalPayments: 1, // Only this month
+      isActive: true,
       createdAt: getCurrentDate(),
       updatedAt: getCurrentDate(),
     },
@@ -207,15 +213,36 @@ export function generateSampleDebtMonthly(debts: Debt[], debtSubpayments: DebtSu
   const month = getCurrentMonth();
   
   return debts.map(debt => {
-    const subpayments = debtSubpayments.filter(sp => sp.debtId === debt.id);
+    const allSubpayments = debtSubpayments.filter(sp => sp.debtId === debt.id);
+    
+    // Filter only visible subpayments based on visibility rules
+    const visibleSubpayments = allSubpayments.filter(sp => {
+      const [startYear, startMonth] = sp.startDate.split('-').slice(0, 2).map(Number);
+      const [targetYear, targetMonthNum] = month.split('-').map(Number);
+      const monthsDiff = (targetYear - startYear) * 12 + (targetMonthNum - startMonth);
+      
+      // Before start date
+      if (monthsDiff < 0) return false;
+      
+      // totalPayments = 0: permanent
+      if (sp.totalPayments === 0) return true;
+      
+      // totalPayments = 1: only start month
+      if (sp.totalPayments === 1) return monthsDiff === 0;
+      
+      // totalPayments > 1: visible for that many months
+      return monthsDiff < sp.totalPayments;
+    });
+    
     return {
       id: generateId(),
       debtId: debt.id,
       month,
-      currentPaymentNumber: 1,
-      subpayments: subpayments.map(sp => ({
+      subpayments: visibleSubpayments.map(sp => ({
         subpaymentId: sp.id,
-        amount: sp.initialValue,
+        description: sp.description,
+        amountARS: sp.amountARS,
+        amountUSD: sp.amountUSD,
         isPaid: false,
       })),
       isPaid: false,
