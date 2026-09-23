@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTable, useAuth } from '../hooks';
-import { CreditCard, Investment } from '../types';
+import { CreditCard, Investment, Debt, DebtSubpayment } from '../types';
 import CreditCardBaseForm from '../components/CreditCardBaseForm';
 import InvestmentBaseForm from '../components/InvestmentBaseForm';
+import DebtBaseForm from '../components/DebtBaseForm';
 import Modal from '../components/Modal';
 import LoginForm from '../components/LoginForm';
 import DataService from '../services/DataService';
@@ -11,11 +12,37 @@ import './admin.css';
 export default function AdminPage() {
   const { items: creditCards, addItem: addCard, updateItem: updateCard } = useTable<CreditCard>('creditCards');
   const { items: investments, addItem: addInvestment, updateItem: updateInvestment } = useTable<Investment>('investments');
+  const { items: debts, addItem: addDebt, updateItem: updateDebt } = useTable<Debt>('debts');
   const { user } = useAuth();
   const [showCardForm, setShowCardForm] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | undefined>();
   const [showInvestmentForm, setShowInvestmentForm] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | undefined>();
+  const [showDebtForm, setShowDebtForm] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<Debt | undefined>();
+  const [editingDebtSubpayments, setEditingDebtSubpayments] = useState<DebtSubpayment[]>([]);
+  const [allDebtSubpayments, setAllDebtSubpayments] = useState<DebtSubpayment[]>([]);
+
+  // Load all data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const data = await DataService.loadAllData();
+        setAllDebtSubpayments(data.debtSubpayments);
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    };
+    loadData();
+  }, [debts]); // Reload when debts change
+
+  // Sync editing debt subpayments when the editing debt or all subpayments change
+  useEffect(() => {
+    if (editingDebt && allDebtSubpayments.length > 0) {
+      const debtSubs = allDebtSubpayments.filter((sp: DebtSubpayment) => sp.debtId === editingDebt.id);
+      setEditingDebtSubpayments(debtSubs);
+    }
+  }, [editingDebt, allDebtSubpayments]);
 
   const handleSaveCard = async (card: CreditCard) => {
     try {
@@ -93,6 +120,92 @@ export default function AdminPage() {
       console.error('Error deleting investment:', error);
       alert('❌ Failed to delete investment');
     }
+  };
+
+  const handleSaveDebt = async (debt: Debt, subpayments: DebtSubpayment[]) => {
+    try {
+      console.log('🔍 handleSaveDebt START - Received:', { debt, subpayments });
+      
+      const data = await DataService.loadAllData();
+      console.log('💾 Loaded existing data:', { debtsCount: data.debts.length, subpaymentsCount: data.debtSubpayments.length });
+      
+      // Ensure all subpayments have the correct debtId
+      const subpaymentsWithDebtId = subpayments.map((sp) => ({
+        ...sp,
+        debtId: debt.id,
+      }));
+      console.log('🔗 Set debtId for all subpayments:', subpaymentsWithDebtId);
+
+      // Update or add the debt
+      const existing = data.debts.find((d) => d.id === debt.id);
+      if (existing) {
+        console.log('✏️ Updating existing debt:', debt.id);
+        data.debts = data.debts.map((d) => (d.id === debt.id ? debt : d));
+      } else {
+        console.log('✨ Adding new debt:', debt.id);
+        data.debts.push(debt);
+      }
+
+      // Replace all subpayments for this debt
+      const oldSubpayments = data.debtSubpayments.filter((sp) => sp.debtId === debt.id);
+      console.log('🗑️ Removing old subpayments:', oldSubpayments.length, oldSubpayments);
+      
+      data.debtSubpayments = [
+        ...data.debtSubpayments.filter((sp) => sp.debtId !== debt.id),
+        ...subpaymentsWithDebtId,
+      ];
+      console.log('✅ Final subpayments for this debt:', data.debtSubpayments.filter((sp) => sp.debtId === debt.id));
+
+      await DataService.saveAllData(data);
+      console.log('💾 Data saved to localStorage');
+      
+      // Reload the subpayments in state
+      setAllDebtSubpayments(data.debtSubpayments);
+      
+      // Close the form
+      setShowDebtForm(false);
+      setEditingDebt(undefined);
+      setEditingDebtSubpayments([]);
+      
+      console.log('✅ handleSaveDebt COMPLETE');
+    } catch (error) {
+      console.error('❌ Error saving debt:', error);
+      alert('❌ Failed to save debt: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  const toggleDebtStatus = async (debt: Debt) => {
+    try {
+      await updateDebt(debt.id, { isActive: !debt.isActive });
+    } catch (error) {
+      console.error('Error toggling debt:', error);
+    }
+  };
+
+  const handleDeleteDebt = async (debt: Debt) => {
+    if (!window.confirm(`🗑️ Are you sure you want to permanently delete "${debt.name}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      const data = await DataService.loadAllData();
+      data.debts = data.debts.filter((d) => d.id !== debt.id);
+      data.debtSubpayments = data.debtSubpayments.filter((sp) => sp.debtId !== debt.id);
+      data.debtsMonthly = data.debtsMonthly.filter((dm) => dm.debtId !== debt.id);
+      await DataService.saveAllData(data);
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting debt:', error);
+      alert('❌ Failed to delete debt');
+    }
+  };
+
+  const handleEditDebt = (debt: Debt) => {
+    console.log('📝 handleEditDebt - Loading debt:', debt.id);
+    setEditingDebt(debt);
+    const debtSubs = allDebtSubpayments.filter((sp) => sp.debtId === debt.id);
+    console.log('🔍 Found subpayments for debt:', debtSubs.length, debtSubs);
+    setEditingDebtSubpayments(debtSubs);
+    setShowDebtForm(true);
   };
 
   return (
@@ -330,6 +443,112 @@ export default function AdminPage() {
             setEditingInvestment(undefined);
           }}
           initialData={editingInvestment}
+        />
+      </Modal>
+
+      {/* DEBTS MANAGEMENT */}
+      <div className="card">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>💳 Debts</h3>
+          <button
+            className="button button-primary"
+            onClick={() => {
+              setEditingDebt(undefined);
+              setEditingDebtSubpayments([]);
+              setShowDebtForm(true);
+            }}
+          >
+            + Add Debt
+          </button>
+        </div>
+
+        {debts.length === 0 ? (
+          <p style={{ color: '#999', textAlign: 'center' }}>No debts yet</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
+            {debts.map((debt) => {
+              const debtSubs = allDebtSubpayments.filter((sp: DebtSubpayment) => sp.debtId === debt.id);
+              const activeSubpayments = debtSubs.filter((sp: DebtSubpayment) => sp.isActive).length;
+              const totalARS = debtSubs.reduce((sum: number, sp: DebtSubpayment) => sum + sp.amountARS, 0);
+
+              return (
+                <div
+                  key={debt.id}
+                  style={{
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    background: debt.isActive ? '#fff' : '#f9f9f9',
+                    opacity: debt.isActive ? 1 : 0.7,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: '13px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {debt.name}
+                    </strong>
+                    <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+                      {activeSubpayments} line {activeSubpayments === 1 ? 'item' : 'items'}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#d32f2f', borderTop: '1px solid #eee', paddingTop: '6px' }}>
+                    ARS {totalARS.toLocaleString('en-US')}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px', marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid #eee' }}>
+                    <button
+                      className="button button-secondary"
+                      style={{ fontSize: '10px', padding: '4px 6px', flex: 1 }}
+                      onClick={() => handleEditDebt(debt)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className={`button ${debt.isActive ? 'button-secondary' : 'button-primary'}`}
+                      style={{ fontSize: '10px', padding: '4px 6px', flex: 1 }}
+                      onClick={() => toggleDebtStatus(debt)}
+                    >
+                      {debt.isActive ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      className="button"
+                      style={{ fontSize: '10px', padding: '4px 6px', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                      onClick={() => handleDeleteDebt(debt)}
+                      title="Permanently delete this debt"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal for Add/Edit Debt Form */}
+      <Modal
+        isOpen={showDebtForm}
+        title={editingDebt ? 'Edit Debt' : 'Add New Debt'}
+        onClose={() => {
+          setShowDebtForm(false);
+          setEditingDebt(undefined);
+          setEditingDebtSubpayments([]);
+        }}
+        size="large"
+      >
+        <DebtBaseForm
+          onSave={handleSaveDebt}
+          onCancel={() => {
+            setShowDebtForm(false);
+            setEditingDebt(undefined);
+            setEditingDebtSubpayments([]);
+          }}
+          initialDebt={editingDebt}
+          initialSubpayments={editingDebtSubpayments}
         />
       </Modal>
 

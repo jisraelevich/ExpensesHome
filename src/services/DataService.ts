@@ -626,6 +626,29 @@ class DataService {
       return [];
     }
   }
+
+  /**
+   * Calculate which payment number this is for a subpayment in a given month
+   * Returns { current, total } where:
+   * - current: which number payment (1, 2, 3, etc.)
+   * - total: totalPayments value (0 for permanent, 1 for single month, or the number of months)
+   */
+  public static getPaymentNumber(subpayment: DebtSubpayment, targetMonth: string): { current: number; total: number } {
+    const [startYear, startMonth] = subpayment.startDate.split('-').slice(0, 2).map(Number);
+    const [targetYear, targetMonthNum] = targetMonth.split('-').map(Number);
+
+    // Calculate months between start and target
+    const monthsDiff = (targetYear - startYear) * 12 + (targetMonthNum - startMonth);
+
+    // Current payment number starts at 1
+    const current = monthsDiff + 1;
+
+    return {
+      current: Math.max(1, current),
+      total: subpayment.totalPayments,
+    };
+  }
 }
+
 
 export default DataService;

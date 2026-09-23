@@ -83,6 +83,30 @@ input[type="number"] {
   box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
 }
 
+/* Integer input styling - used for quantity, payment count, etc. */
+.integer-input {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+  background-color: #fff;
+}
+
+.integer-input:hover {
+  border-color: #bbb;
+  background-color: #fafafa;
+}
+
+.integer-input:focus {
+  outline: none;
+  background-color: #f0f8ff;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
 .input-field:focus,
 textarea:focus,
 select:focus {

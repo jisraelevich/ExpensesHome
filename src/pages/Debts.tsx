@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useTable } from '../hooks';
-import { Debt, DebtMonthly, DebtSubpayment } from '../types';
+import { Debt, DebtMonthly, DebtSubpayment, DebtMonthlySubpayment } from '../types';
 import Modal from '../components/Modal';
 import { getCurrentDate } from '../utils/helpers';
+import DataService from '../services/DataService';
 
 interface DebtsPageProps {
   month: string;
@@ -11,44 +12,37 @@ interface DebtsPageProps {
 
 export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
   const { items: debts } = useTable<Debt>('debts');
-  const { items: monthlyItems, updateItem: updateMonthly, addItem: addMonthly } = useTable<DebtMonthly>('debtsMonthly');
+  const { items: debtsMonthly, updateItem: updateMonthly, addItem: addMonthly } = useTable<DebtMonthly>('debtsMonthly');
   const { items: subpayments } = useTable<DebtSubpayment>('debtSubpayments');
   const [selectedMonthly, setSelectedMonthly] = useState<DebtMonthly | undefined>();
   const [showMonthlyModal, setShowMonthlyModal] = useState(false);
+  const [copyPreviewMessage, setCopyPreviewMessage] = useState('');
+  const [showCopyPreview, setShowCopyPreview] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const activeDebts = debts.filter((debt) => debt.isActive);
 
-  // Auto-create monthly entries for debts that don't have them
+  // Auto-create monthly entries for debts with visibility filtering
   useEffect(() => {
     const ensureMonthlyEntries = async () => {
       for (const debt of activeDebts) {
-        const existing = monthlyItems.find((mi) => mi.debtId === debt.id && mi.month === month);
+        const existing = debtsMonthly.find((dm) => dm.debtId === debt.id && dm.month === month);
         if (!existing) {
-          const debtSubpayments = subpayments.filter((sp) => sp.debtId === debt.id);
+          const visibleSubpayments = await DataService.getVisibleSubpaymentsForMonth(debt.id, month);
           
-          // Calculate payment number from createdAt
-          const startYear = parseInt(debt.createdAt.split('-')[0]);
-          const startMonthNum = parseInt(debt.createdAt.split('-')[1]);
-          const currentYear = parseInt(month.split('-')[0]);
-          const currentMonthNum = parseInt(month.split('-')[1]);
-          const paymentNumber = (currentYear - startYear) * 12 + (currentMonthNum - startMonthNum) + 1;
-
-          // Create sub-payment data for this month
-          const monthlySubpayments = debtSubpayments
-            .filter((sp) => paymentNumber >= sp.paymentNumber)
-            .map((sp) => ({
+          if (visibleSubpayments.length > 0) {
+            const monthlySubpayments: DebtMonthlySubpayment[] = visibleSubpayments.map((sp) => ({
               subpaymentId: sp.id,
-              amount: sp.initialValue,
+              description: sp.description,
+              amountARS: sp.amountARS,
+              amountUSD: sp.amountUSD,
               isPaid: false,
             }));
 
-          // Only create if there are sub-payments for this month
-          if (monthlySubpayments.length > 0) {
             await addMonthly({
               id: `${debt.id}-${month}`,
               debtId: debt.id,
               month: month,
-              currentPaymentNumber: paymentNumber,
               subpayments: monthlySubpayments,
               isPaid: false,
               paidDate: undefined,
@@ -63,10 +57,57 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
     if (activeDebts.length > 0) {
       ensureMonthlyEntries();
     }
-  }, [month, activeDebts, monthlyItems, subpayments, addMonthly]);
+  }, [month, activeDebts, debtsMonthly, subpayments, addMonthly]);
 
   const getMonthlyData = (debtId: string) => {
-    return monthlyItems.find((mi) => mi.debtId === debtId && mi.month === month);
+    return debtsMonthly.find((dm) => dm.debtId === debtId && dm.month === month);
+  };
+
+  // Copy to clipboard - shows preview first
+  const handleShowCopyPreview = (debt: Debt, monthly: DebtMonthly | undefined) => {
+    if (!monthly) return;
+
+    const totalARS = monthly.subpayments.reduce((sum, sp) => sum + sp.amountARS, 0);
+    const totalUSD = monthly.subpayments.reduce((sum, sp) => sum + sp.amountUSD, 0);
+
+    let message = `💳 *${debt.name}*\n\n`;
+    message += `📅 ${month}\n`;
+    message += `━━━━━━━━━━━━━━━━\n\n`;
+
+    monthly.subpayments.forEach((sp) => {
+      const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+      const paymentNum = subpaymentDef ? DataService.getPaymentNumber(subpaymentDef, month) : { current: 1, total: 0 };
+      const paymentLabel =
+        paymentNum.total === 0
+          ? '(permanent)'
+          : paymentNum.total === 1
+            ? '(this month only)'
+            : `(${paymentNum.current}/${paymentNum.total})`;
+
+      message += `• ${sp.description} ${paymentLabel}\n`;
+      message += `  ARS: $${sp.amountARS.toLocaleString('en-US')}\n`;
+      message += `  USD: $${sp.amountUSD.toFixed(2)}\n\n`;
+    });
+
+    message += `━━━━━━━━━━━━━━━━\n`;
+    message += `*Total ARS:* $${totalARS.toLocaleString('en-US')}\n`;
+    message += `*Total USD:* $${totalUSD.toFixed(2)}\n`;
+    message += `\n${monthly.isPaid ? '✅ PAID' : '⏳ PENDING'}`;
+
+    setCopyPreviewMessage(message);
+    setShowCopyPreview(true);
+  };
+
+  const doCopyToClipboard = () => {
+    navigator.clipboard.writeText(copyPreviewMessage).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => {
+        setCopySuccess(false);
+        setShowCopyPreview(false);
+      }, 1500);
+    }).catch(() => {
+      alert('❌ Failed to copy to clipboard');
+    });
   };
 
   return (
@@ -78,7 +119,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
       {/* Monthly Edit Modal */}
       <Modal
         isOpen={showMonthlyModal && !!selectedMonthly}
-        title={`Edit Debt Payment #${selectedMonthly?.currentPaymentNumber || ''}`}
+        title={selectedMonthly ? `Edit Debt - ${debts.find((d) => d.id === selectedMonthly.debtId)?.name || 'Unknown'} (${month})` : 'Edit Debt'}
         onClose={() => {
           setShowMonthlyModal(false);
           setSelectedMonthly(undefined);
@@ -104,34 +145,65 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
             style={{ display: 'grid', gap: '12px' }}
           >
             {selectedMonthly.subpayments.map((sp, idx) => {
-              const subpayment = subpayments.find((s) => s.id === sp.subpaymentId);
+              const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+              const paymentNum = subpaymentDef ? DataService.getPaymentNumber(subpaymentDef, month) : { current: 1, total: 0 };
+              const paymentLabel =
+                paymentNum.total === 0
+                  ? '(permanent)'
+                  : paymentNum.total === 1
+                    ? '(this month only)'
+                    : `(${paymentNum.current}/${paymentNum.total})`;
+
               return (
                 <div key={sp.subpaymentId}>
-                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-                    {subpayment?.description} *
+                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>
+                    {sp.description} <span style={{ color: '#999' }}>{paymentLabel}</span>
                   </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    className="money-input"
-                    value={String(sp.amount || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    onChange={(e) => {
-                      const cleaned = e.target.value.replace(/,/g, '');
-                      const num = parseFloat(cleaned);
-                      const updated = [...selectedMonthly.subpayments];
-                      updated[idx].amount = isNaN(num) ? 0 : num;
-                      setSelectedMonthly({ ...selectedMonthly, subpayments: updated });
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '6px 8px',
-                      fontSize: '13px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                    }}
-                  />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                    <div>
+                      <small style={{ color: '#666' }}>ARS</small>
+                      <input
+                        type="number"
+                        className="money-input"
+                        value={sp.amountARS || ''}
+                        onChange={(e) => {
+                          const updated = [...selectedMonthly.subpayments];
+                          updated[idx].amountARS = parseFloat(e.target.value) || 0;
+                          setSelectedMonthly({ ...selectedMonthly, subpayments: updated });
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          fontSize: '13px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <small style={{ color: '#666' }}>USD</small>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="money-input"
+                        value={sp.amountUSD || ''}
+                        onChange={(e) => {
+                          const updated = [...selectedMonthly.subpayments];
+                          updated[idx].amountUSD = parseFloat(e.target.value) || 0;
+                          setSelectedMonthly({ ...selectedMonthly, subpayments: updated });
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          fontSize: '13px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -156,23 +228,85 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
         )}
       </Modal>
 
+      {/* Copy Preview Modal */}
+      <Modal
+        isOpen={showCopyPreview}
+        title="📋 Review Message"
+        onClose={() => setShowCopyPreview(false)}
+        size="small"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Preview Box */}
+          <div
+            style={{
+              backgroundColor: '#f5f5f5',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              padding: '12px',
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              lineHeight: '1.6',
+              maxHeight: '300px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {copyPreviewMessage}
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setShowCopyPreview(false)}
+              style={{
+                padding: '8px 16px',
+                fontSize: '12px',
+                backgroundColor: '#ccc',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={doCopyToClipboard}
+              style={{
+                padding: '8px 16px',
+                fontSize: '12px',
+                backgroundColor: copySuccess ? '#4CAF50' : '#25D366',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                transition: 'background-color 0.3s',
+              }}
+            >
+              {copySuccess ? '✅ Copied!' : '📋 Copy to Clipboard'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Debts Cards */}
       {activeDebts.length === 0 ? (
         <div className="card">
-          <p style={{ textAlign: 'center', color: '#999' }}>No debts yet</p>
+          <p style={{ textAlign: 'center', color: '#999' }}>No debts yet. Go to Admin to add one.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
           {activeDebts.map((debt) => {
             const monthly = getMonthlyData(debt.id);
-            const debtSubpayments = subpayments.filter((sp) => sp.debtId === debt.id);
-            const totalAmount = monthly?.subpayments.reduce((sum, sp) => sum + sp.amount, 0) || 0;
+            const totalARS = monthly?.subpayments.reduce((sum, sp) => sum + sp.amountARS, 0) || 0;
+            const totalUSD = monthly?.subpayments.reduce((sum, sp) => sum + sp.amountUSD, 0) || 0;
 
             return (
               <div
                 key={debt.id}
                 style={{
-                  border: '1px solid #ddd',
+                  border: monthly?.isPaid ? '2px solid #4CAF50' : '1px solid #ddd',
                   borderRadius: '6px',
                   padding: '12px',
                   background: monthly?.isPaid ? '#f0fdf4' : '#fff',
@@ -182,17 +316,14 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                 }}
               >
                 {/* Debt Name */}
-                <div style={{ fontSize: '13px', fontWeight: 600 }}>
-                  📝 {debt.name}
+                <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>💳 {debt.name}</span>
+                  {monthly?.isPaid && <span style={{ fontSize: '12px', color: '#4CAF50' }}>✓ PAID</span>}
                 </div>
 
                 {/* Payment Info */}
                 {monthly ? (
                   <div style={{ borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#666', marginBottom: '6px' }}>
-                      <strong>Payment:</strong> #{monthly.currentPaymentNumber}
-                    </div>
-
                     {/* Total Amount (Clickable) */}
                     <div
                       onClick={() => {
@@ -201,7 +332,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                       }}
                       style={{
                         cursor: 'pointer',
-                        padding: '8px',
+                        padding: '10px',
                         background: '#f0f9ff',
                         border: '1px solid #bfdbfe',
                         borderRadius: '4px',
@@ -209,7 +340,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                         fontWeight: 600,
                         color: '#0066cc',
                         textAlign: 'center',
-                        marginBottom: '6px',
+                        marginBottom: '8px',
                         transition: 'all 0.2s',
                       }}
                       onMouseEnter={(e) => {
@@ -221,27 +352,62 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                         (e.currentTarget as HTMLElement).style.borderColor = '#bfdbfe';
                       }}
                     >
-                      $ {totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ARS ${totalARS.toLocaleString('en-US')} | USD ${totalUSD.toFixed(2)}
                     </div>
 
                     {/* Sub-payments List */}
-                    <div style={{ fontSize: '9px', color: '#666', display: 'grid', gap: '4px' }}>
+                    <div style={{ fontSize: '11px', color: '#666', display: 'grid', gap: '6px', marginBottom: '8px' }}>
                       {monthly.subpayments.map((sp) => {
-                        const subpayment = debtSubpayments.find((s) => s.id === sp.subpaymentId);
+                        const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+                        const paymentNum = subpaymentDef ? DataService.getPaymentNumber(subpaymentDef, month) : { current: 1, total: 0 };
+                        const paymentLabel =
+                          paymentNum.total === 0
+                            ? '(permanent)'
+                            : paymentNum.total === 1
+                              ? '(this month only)'
+                              : `(${paymentNum.current}/${paymentNum.total})`;
+
                         return (
-                          <div key={sp.subpaymentId} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 6px', background: '#f9f9f9', borderRadius: '3px' }}>
-                            <span>{subpayment?.description}:</span>
-                            <strong>${sp.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                          <div
+                            key={sp.subpaymentId}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              padding: '6px',
+                              background: '#f9f9f9',
+                              borderRadius: '3px',
+                            }}
+                          >
+                            <span>
+                              {sp.description} <span style={{ color: '#999' }}>{paymentLabel}</span>
+                            </span>
+                            <span style={{ fontWeight: 600 }}>
+                              ${sp.amountARS.toLocaleString('en-US')} / ${sp.amountUSD.toFixed(2)}
+                            </span>
                           </div>
                         );
                       })}
                     </div>
 
-                    {/* Status Badge */}
-                    <div style={{ textAlign: 'center', marginTop: '6px' }}>
-                      <span
-                        className={`badge badge-${monthly.isPaid ? 'success' : 'warning'}`}
-                        style={{ fontSize: '10px', cursor: 'pointer' }}
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        onClick={() => handleShowCopyPreview(debt, monthly)}
+                        style={{
+                          flex: 1,
+                          padding: '6px',
+                          fontSize: '11px',
+                          backgroundColor: '#25D366',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        📋 Copy to clipboard
+                      </button>
+                      <button
                         onClick={async () => {
                           try {
                             const now = getCurrentDate();
@@ -254,14 +420,25 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                             console.error('Error toggling status:', error);
                           }
                         }}
+                        style={{
+                          flex: 1,
+                          padding: '6px',
+                          fontSize: '11px',
+                          backgroundColor: monthly.isPaid ? '#ff9800' : '#4CAF50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                        }}
                       >
-                        {monthly.isPaid ? '✓ Paid' : 'Pending'}
-                      </span>
+                        {monthly.isPaid ? '↩️ Undo' : '✓ Mark Paid'}
+                      </button>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ fontSize: '11px', color: '#999', textAlign: 'center', padding: '8px' }}>
-                    No payment data for this month
+                  <div style={{ fontSize: '11px', color: '#999', textAlign: 'center', padding: '8px', fontStyle: 'italic' }}>
+                    No active items for this month
                   </div>
                 )}
               </div>
