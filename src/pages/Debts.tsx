@@ -63,19 +63,31 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
     return debtsMonthly.find((dm) => dm.debtId === debtId && dm.month === month);
   };
 
+  // Get current description from subpayment definition (not cached version)
+  const getSubpaymentDescription = (subpaymentId: string): string => {
+    return subpayments.find((s) => s.id === subpaymentId)?.description || 'Unknown';
+  };
+
   // Copy to clipboard - shows preview first
   const handleShowCopyPreview = (debt: Debt, monthly: DebtMonthly | undefined) => {
     if (!monthly) return;
 
-    const totalARS = monthly.subpayments.reduce((sum, sp) => sum + sp.amountARS, 0);
-    const totalUSD = monthly.subpayments.reduce((sum, sp) => sum + sp.amountUSD, 0);
+    // Only include visible subpayments in the message
+    const visibleSubpayments = monthly.subpayments.filter((sp) => {
+      const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+      return subpaymentDef && DataService.isSubpaymentVisibleInMonth(subpaymentDef, month);
+    });
+
+    const totalARS = visibleSubpayments.reduce((sum, sp) => sum + sp.amountARS, 0);
+    const totalUSD = visibleSubpayments.reduce((sum, sp) => sum + sp.amountUSD, 0);
 
     let message = `💳 *${debt.name}*\n\n`;
     message += `📅 ${month}\n`;
     message += `━━━━━━━━━━━━━━━━\n\n`;
 
-    monthly.subpayments.forEach((sp) => {
+    visibleSubpayments.forEach((sp) => {
       const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+      const currentDescription = getSubpaymentDescription(sp.subpaymentId);
       const paymentNum = subpaymentDef ? DataService.getPaymentNumber(subpaymentDef, month) : { current: 1, total: 0 };
       const paymentLabel =
         paymentNum.total === 0
@@ -84,7 +96,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
             ? '(this month only)'
             : `(${paymentNum.current}/${paymentNum.total})`;
 
-      message += `• ${sp.description} ${paymentLabel}\n`;
+      message += `• ${currentDescription} ${paymentLabel}\n`;
       message += `  ARS: $${sp.amountARS.toLocaleString('en-US')}\n`;
       message += `  USD: $${sp.amountUSD.toFixed(2)}\n\n`;
     });
@@ -157,7 +169,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
               return (
                 <div key={sp.subpaymentId}>
                   <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>
-                    {sp.description} <span style={{ color: '#999' }}>{paymentLabel}</span>
+                    {getSubpaymentDescription(sp.subpaymentId)} <span style={{ color: '#999' }}>{paymentLabel}</span>
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                     <div>
@@ -299,8 +311,13 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
           {activeDebts.map((debt) => {
             const monthly = getMonthlyData(debt.id);
-            const totalARS = monthly?.subpayments.reduce((sum, sp) => sum + sp.amountARS, 0) || 0;
-            const totalUSD = monthly?.subpayments.reduce((sum, sp) => sum + sp.amountUSD, 0) || 0;
+            // Only calculate totals for visible subpayments
+            const visibleSubpayments = monthly?.subpayments.filter((sp) => {
+              const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+              return subpaymentDef && DataService.isSubpaymentVisibleInMonth(subpaymentDef, month);
+            }) || [];
+            const totalARS = visibleSubpayments.reduce((sum, sp) => sum + sp.amountARS, 0);
+            const totalUSD = visibleSubpayments.reduce((sum, sp) => sum + sp.amountUSD, 0);
 
             return (
               <div
@@ -357,36 +374,44 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
 
                     {/* Sub-payments List */}
                     <div style={{ fontSize: '11px', color: '#666', display: 'grid', gap: '6px', marginBottom: '8px' }}>
-                      {monthly.subpayments.map((sp) => {
-                        const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
-                        const paymentNum = subpaymentDef ? DataService.getPaymentNumber(subpaymentDef, month) : { current: 1, total: 0 };
-                        const paymentLabel =
-                          paymentNum.total === 0
-                            ? '(permanent)'
-                            : paymentNum.total === 1
-                              ? '(this month only)'
-                              : `(${paymentNum.current}/${paymentNum.total})`;
+                      {monthly.subpayments
+                        .filter((sp) => {
+                          // Only show subpayments that are still visible
+                          const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+                          if (!subpaymentDef) return false;
+                          // Check if this subpayment should be visible in this month
+                          return DataService.isSubpaymentVisibleInMonth(subpaymentDef, month);
+                        })
+                        .map((sp) => {
+                          const subpaymentDef = subpayments.find((s) => s.id === sp.subpaymentId);
+                          const paymentNum = subpaymentDef ? DataService.getPaymentNumber(subpaymentDef, month) : { current: 1, total: 0 };
+                          const paymentLabel =
+                            paymentNum.total === 0
+                              ? '(permanent)'
+                              : paymentNum.total === 1
+                                ? '(this month only)'
+                                : `(${paymentNum.current}/${paymentNum.total})`;
 
-                        return (
-                          <div
-                            key={sp.subpaymentId}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              padding: '6px',
-                              background: '#f9f9f9',
-                              borderRadius: '3px',
-                            }}
-                          >
-                            <span>
-                              {sp.description} <span style={{ color: '#999' }}>{paymentLabel}</span>
-                            </span>
-                            <span style={{ fontWeight: 600 }}>
-                              ${sp.amountARS.toLocaleString('en-US')} / ${sp.amountUSD.toFixed(2)}
-                            </span>
-                          </div>
-                        );
-                      })}
+                          return (
+                            <div
+                              key={sp.subpaymentId}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                padding: '6px',
+                                background: '#f9f9f9',
+                                borderRadius: '3px',
+                              }}
+                            >
+                              <span>
+                                {getSubpaymentDescription(sp.subpaymentId)} <span style={{ color: '#999' }}>{paymentLabel}</span>
+                              </span>
+                              <span style={{ fontWeight: 600 }}>
+                                ${sp.amountARS.toLocaleString('en-US')} / ${sp.amountUSD.toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
                     </div>
 
                     {/* Action Buttons */}

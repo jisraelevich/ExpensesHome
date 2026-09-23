@@ -109,7 +109,6 @@ export default function CreditCardMonthlyForm({
               border: '1px solid #ddd',
               borderRadius: '4px'
             }}
-            className="money-input"
           />
         </div>
       </div>
@@ -133,7 +132,6 @@ export default function CreditCardMonthlyForm({
               border: '1px solid #ddd',
               borderRadius: '4px'
             }}
-            className="money-input"
           />
         </div>
         <div>
@@ -153,7 +151,6 @@ export default function CreditCardMonthlyForm({
               border: '1px solid #ddd',
               borderRadius: '4px'
             }}
-            className="money-input"
           />
         </div>
       </div>

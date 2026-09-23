@@ -90,14 +90,68 @@ class DataService {
   }
 
   /**
-   * Save entire dataset
+   * Save entire dataset with safety checks
+   * - Auto-backup BEFORE saving
+   * - Validate data integrity
+   * - Prevent data loss
    */
   public static async saveAllData(data: StorageData): Promise<void> {
     try {
+      // CRITICAL: Backup BEFORE saving (not after)
+      await this.createAutoBackup();
+
+      // Validate data integrity - prevent catastrophic loss
+      const currentData = this.loadAllDataSync();
+      this.validateDataIntegrity(currentData, data);
+
+      // Now save the new data
       localStorage.setItem(STORAGE_KEY_PREFIX + 'all', JSON.stringify(data));
+
+      console.log('✅ Data saved safely with backup protection');
     } catch (error) {
-      console.error('Error saving data:', error);
+      console.error('❌ ERROR SAVING DATA - Backup created for recovery:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Synchronous load for backup operations (no error handling to fail fast)
+   */
+  private static loadAllDataSync(): StorageData {
+    const stored = localStorage.getItem(STORAGE_KEY_PREFIX + 'all');
+    return stored ? JSON.parse(stored) : this.getDefaultData();
+  }
+
+  /**
+   * Validate that we're not losing critical data
+   */
+  private static validateDataIntegrity(currentData: StorageData, newData: StorageData): void {
+    const criticalTables: (keyof StorageData)[] = [
+      'creditCards',
+      'investments',
+      'debts',
+      'dollarRates',
+      'expenses',
+    ];
+
+    for (const tableName of criticalTables) {
+      const currentCount = (currentData[tableName] as any[])?.length || 0;
+      const newCount = (newData[tableName] as any[])?.length || 0;
+
+      // Warn if a table is losing >50% of items (possible bug)
+      if (currentCount > 0 && newCount < currentCount * 0.5) {
+        const lossPercentage = Math.round((1 - newCount / currentCount) * 100);
+        console.warn(
+          `⚠️ DATA LOSS WARNING: ${tableName} losing ${lossPercentage}% of items (${currentCount} → ${newCount})`
+        );
+
+        // If we're losing ALL items from a critical table, throw error
+        if (newCount === 0 && currentCount > 0) {
+          throw new Error(
+            `CRITICAL: Refusing to save - would erase all ${tableName} (${currentCount} items lost). This is likely a bug. Backup created for recovery.`
+          );
+        }
+      }
     }
   }
 
@@ -158,28 +212,6 @@ class DataService {
   ): Promise<T[]> {
     const table = await this.loadTable<T>(tableName);
     return table.filter((item) => item.month === month);
-  }
-
-  /**
-   * Export as JSON
-   */
-  public static async exportToJSON(): Promise<string> {
-    const data = await this.loadAllData();
-    return JSON.stringify(data, null, 2);
-  }
-
-  /**
-   * Import from JSON
-   */
-  public static async importFromJSON(jsonString: string): Promise<boolean> {
-    try {
-      const data = JSON.parse(jsonString) as StorageData;
-      await this.saveAllData(data);
-      return true;
-    } catch (error) {
-      console.error('Error importing JSON:', error);
-      return false;
-    }
   }
 
   /**
@@ -426,7 +458,7 @@ class DataService {
   /**
    * Create timestamped auto-backup in localStorage (keep last 5)
    */
-  public static async createAutoBackup(): Promise<void> {
+  public static async createAutoBackup(): Promise<string> {
     try {
       const data = await this.loadAllData();
       const timestamp = new Date().toISOString();
@@ -434,7 +466,7 @@ class DataService {
       
       localStorage.setItem(backupKey, JSON.stringify(data));
 
-      // Cleanup old backups (keep last 5)
+      // Keep last 20 backups (increased from 5 for better recovery)
       const allKeys = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -443,12 +475,20 @@ class DataService {
         }
       }
 
-      // Sort and keep only last 5
-      if (allKeys.length > 5) {
-        allKeys.sort().slice(0, -5).forEach(key => localStorage.removeItem(key!));
+      // Sort and keep only last 20
+      if (allKeys.length > 20) {
+        const toDelete = allKeys.sort().slice(0, -20);
+        toDelete.forEach(key => {
+          localStorage.removeItem(key!);
+          console.log(`🗑️ Cleaned old backup: ${key}`);
+        });
       }
+
+      console.log(`💾 Auto-backup created: ${timestamp}`);
+      return backupKey;
     } catch (error) {
-      console.error('Error creating auto-backup:', error);
+      console.error('❌ Error creating auto-backup:', error);
+      throw error;
     }
   }
 
@@ -648,7 +688,58 @@ class DataService {
       total: subpayment.totalPayments,
     };
   }
-}
 
+  /**
+   * Get data recovery information for display
+   */
+  public static getRecoveryInfo(): {
+    totalBackups: number;
+    oldestBackup: string | null;
+    newestBackup: string | null;
+    canRecover: boolean;
+  } {
+    const backupKeys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(STORAGE_KEY_PREFIX + 'backup_')) {
+        backupKeys.push(key);
+      }
+    }
+
+    backupKeys.sort();
+    return {
+      totalBackups: backupKeys.length,
+      oldestBackup: backupKeys.length > 0 ? backupKeys[0] : null,
+      newestBackup: backupKeys.length > 0 ? backupKeys[backupKeys.length - 1] : null,
+      canRecover: backupKeys.length > 0,
+    };
+  }
+
+  /**
+   * Emergency recovery - restore from most recent backup
+   */
+  public static async emergencyRecover(): Promise<boolean> {
+    try {
+      const backups = this.getRecoveryInfo();
+      if (!backups.canRecover || !backups.newestBackup) {
+        console.error('❌ No backups available for recovery');
+        return false;
+      }
+
+      const backupData = localStorage.getItem(backups.newestBackup);
+      if (!backupData) return false;
+
+      const data = JSON.parse(backupData);
+      // Save directly without triggering another backup to avoid infinite loop
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'all', JSON.stringify(data));
+      
+      console.log('✅ Emergency recovery completed from:', backups.newestBackup);
+      return true;
+    } catch (error) {
+      console.error('❌ Emergency recovery failed:', error);
+      return false;
+    }
+  }
+}
 
 export default DataService;

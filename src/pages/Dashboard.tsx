@@ -14,6 +14,7 @@ interface DashboardPageProps {
 export default function DashboardPage({ data, month }: DashboardPageProps) {
   const [showBackupManager, setShowBackupManager] = useState(false);
   const [latestRate, setLatestRate] = useState<DollarRate | null>(null);
+  const [recoveryInfo, setRecoveryInfo] = useState<any>(null);
   const { items: creditCards } = useTable<CreditCard>('creditCards');
   const { items: creditCardsMonthly } = useTable<CreditCardMonthly>('creditCardsMonthly');
   const { items: investments } = useTable<Investment>('investments');
@@ -33,6 +34,10 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
       // Get the latest rate
       const rate = await DataService.getLatestExchangeRate();
       setLatestRate(rate);
+
+      // Get recovery info
+      const info = DataService.getRecoveryInfo();
+      setRecoveryInfo(info);
     };
 
     initializeRate();
@@ -176,6 +181,37 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
             {showBackupManager ? '▼ Hide' : '▶ Show'}
           </button>
         </div>
+
+        {/* Recovery Status */}
+        {recoveryInfo && (
+          <div style={{ 
+            marginBottom: '12px', 
+            padding: '12px', 
+            backgroundColor: recoveryInfo.canRecover ? '#e8f5e9' : '#fff3e0',
+            borderRadius: '6px',
+            fontSize: '13px',
+            lineHeight: '1.6',
+            borderLeft: `4px solid ${recoveryInfo.canRecover ? '#4CAF50' : '#FF9800'}`
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+              {recoveryInfo.canRecover ? '✅ BACKUPS ACTIVE' : '⚠️ NO BACKUPS AVAILABLE'}
+            </div>
+            <div>
+              <strong>{recoveryInfo.totalBackups}</strong> automatic backups created
+            </div>
+            {recoveryInfo.newestBackup && (
+              <div style={{ color: '#666', marginTop: '4px', fontSize: '12px' }}>
+                Latest: {new Date(recoveryInfo.newestBackup.replace('expenses_2026_backup_', '')).toLocaleString()}
+              </div>
+            )}
+            {recoveryInfo.canRecover && (
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+                💡 If data is lost, click "Show Backups" below and restore a previous backup
+              </div>
+            )}
+          </div>
+        )}
+
         {showBackupManager && (
           <div className="card-content">
             <BackupManager onClose={() => setShowBackupManager(false)} />
