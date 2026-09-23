@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTable, useCurrentMonth } from '../hooks';
 import { CreditCard, CreditCardMonthly, Investment, InvestmentMonthly, Service, Debt, DebtMonthly, Expense, DollarRate } from '../types';
 import { StorageData } from '../types';
 import { formatCurrency, formatDate, getMonthName } from '../utils/helpers';
+import BackupManager from '../components/BackupManager';
 
 interface DashboardPageProps {
   data: StorageData;
@@ -10,6 +11,7 @@ interface DashboardPageProps {
 }
 
 export default function DashboardPage({ data, month }: DashboardPageProps) {
+  const [showBackupManager, setShowBackupManager] = useState(false);
   const { items: creditCards } = useTable<CreditCard>('creditCards');
   const { items: creditCardsMonthly } = useTable<CreditCardMonthly>('creditCardsMonthly');
   const { items: investments } = useTable<Investment>('investments');
@@ -142,6 +144,25 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
             <button className="button button-secondary">Import Data</button>
           </div>
         </div>
+      </div>
+
+      {/* Backup & Restore */}
+      <div className="card">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>💾 Data Backup & Restore</h3>
+          <button
+            className="button button-secondary"
+            onClick={() => setShowBackupManager(!showBackupManager)}
+            style={{ fontSize: '12px', padding: '6px 12px' }}
+          >
+            {showBackupManager ? '▼ Hide' : '▶ Show'}
+          </button>
+        </div>
+        {showBackupManager && (
+          <div className="card-content">
+            <BackupManager onClose={() => setShowBackupManager(false)} />
+          </div>
+        )}
       </div>
     </div>
   );

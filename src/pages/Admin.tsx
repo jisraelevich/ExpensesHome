@@ -5,6 +5,7 @@ import CreditCardBaseForm from '../components/CreditCardBaseForm';
 import InvestmentBaseForm from '../components/InvestmentBaseForm';
 import Modal from '../components/Modal';
 import LoginForm from '../components/LoginForm';
+import DataService from '../services/DataService';
 import './admin.css';
 
 export default function AdminPage() {
@@ -59,6 +60,38 @@ export default function AdminPage() {
       await updateInvestment(investment.id, { isActive: !investment.isActive });
     } catch (error) {
       console.error('Error toggling investment:', error);
+    }
+  };
+
+  const handleDeleteCard = async (card: CreditCard) => {
+    if (!window.confirm(`🗑️ Are you sure you want to permanently delete "${card.bankName}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      const data = await DataService.loadAllData();
+      data.creditCards = data.creditCards.filter((cc) => cc.id !== card.id);
+      data.creditCardsMonthly = data.creditCardsMonthly.filter((ccm) => ccm.creditCardId !== card.id);
+      await DataService.saveAllData(data);
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting card:', error);
+      alert('❌ Failed to delete card');
+    }
+  };
+
+  const handleDeleteInvestment = async (investment: Investment) => {
+    if (!window.confirm(`🗑️ Are you sure you want to permanently delete "${investment.name}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      const data = await DataService.loadAllData();
+      data.investments = data.investments.filter((inv) => inv.id !== investment.id);
+      data.investmentsMonthly = data.investmentsMonthly.filter((im) => im.investmentId !== investment.id);
+      await DataService.saveAllData(data);
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting investment:', error);
+      alert('❌ Failed to delete investment');
     }
   };
 
@@ -145,6 +178,14 @@ export default function AdminPage() {
                     onClick={() => toggleCardStatus(card)}
                   >
                     {card.isActive ? 'Hide' : 'Show'}
+                  </button>
+                  <button
+                    className="button"
+                    style={{ fontSize: '10px', padding: '4px 6px', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                    onClick={() => handleDeleteCard(card)}
+                    title="Permanently delete this card"
+                  >
+                    🗑️
                   </button>
                 </div>
               </div>
@@ -256,6 +297,14 @@ export default function AdminPage() {
                     onClick={() => toggleInvestmentStatus(investment)}
                   >
                     {investment.isActive ? 'Hide' : 'Show'}
+                  </button>
+                  <button
+                    className="button"
+                    style={{ fontSize: '10px', padding: '4px 6px', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                    onClick={() => handleDeleteInvestment(investment)}
+                    title="Permanently delete this investment"
+                  >
+                    🗑️
                   </button>
                 </div>
               </div>
