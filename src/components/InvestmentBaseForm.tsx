@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Investment } from '../types';
 import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
 import './forms.css';

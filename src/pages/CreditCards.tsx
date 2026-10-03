@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTable } from '../hooks';
 import { CreditCard, CreditCardMonthly } from '../types';
 import CreditCardBaseForm from '../components/CreditCardBaseForm';

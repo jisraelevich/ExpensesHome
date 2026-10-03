@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTable, useAuth } from '../hooks';
-import { CreditCard, Investment, Debt, DebtSubpayment } from '../types';
+import { CreditCard, Investment, Debt, DebtSubpayment, ServiceBase } from '../types';
 import CreditCardBaseForm from '../components/CreditCardBaseForm';
 import InvestmentBaseForm from '../components/InvestmentBaseForm';
 import DebtBaseForm from '../components/DebtBaseForm';
+import ServiceBaseForm from '../components/ServiceBaseForm';
 import Modal from '../components/Modal';
 import LoginForm from '../components/LoginForm';
 import DataService from '../services/DataService';
@@ -13,6 +14,7 @@ export default function AdminPage() {
   const { items: creditCards, addItem: addCard, updateItem: updateCard } = useTable<CreditCard>('creditCards');
   const { items: investments, addItem: addInvestment, updateItem: updateInvestment } = useTable<Investment>('investments');
   const { items: debts, addItem: addDebt, updateItem: updateDebt } = useTable<Debt>('debts');
+  const { items: serviceBases, addItem: addServiceBase, updateItem: updateServiceBase } = useTable<ServiceBase>('serviceBases');
   const { user } = useAuth();
   const [showCardForm, setShowCardForm] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | undefined>();
@@ -22,6 +24,8 @@ export default function AdminPage() {
   const [editingDebt, setEditingDebt] = useState<Debt | undefined>();
   const [editingDebtSubpayments, setEditingDebtSubpayments] = useState<DebtSubpayment[]>([]);
   const [allDebtSubpayments, setAllDebtSubpayments] = useState<DebtSubpayment[]>([]);
+  const [showServiceBaseForm, setShowServiceBaseForm] = useState(false);
+  const [editingServiceBase, setEditingServiceBase] = useState<ServiceBase | undefined>();
 
   // Load all data on mount
   useEffect(() => {
@@ -206,6 +210,45 @@ export default function AdminPage() {
     console.log('🔍 Found subpayments for debt:', debtSubs.length, debtSubs);
     setEditingDebtSubpayments(debtSubs);
     setShowDebtForm(true);
+  };
+
+  const handleSaveServiceBase = async (service: ServiceBase) => {
+    try {
+      const existing = serviceBases.find((s) => s.id === service.id);
+      if (existing) {
+        await updateServiceBase(service.id, service);
+      } else {
+        await addServiceBase(service);
+      }
+      setShowServiceBaseForm(false);
+      setEditingServiceBase(undefined);
+    } catch (error) {
+      console.error('Error saving service:', error);
+    }
+  };
+
+  const toggleServiceBaseStatus = async (service: ServiceBase) => {
+    try {
+      await updateServiceBase(service.id, { isActive: !service.isActive });
+    } catch (error) {
+      console.error('Error toggling service:', error);
+    }
+  };
+
+  const handleDeleteServiceBase = async (service: ServiceBase) => {
+    if (!window.confirm(`🗑️ Are you sure you want to permanently delete "${service.description}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      const data = await DataService.loadAllData();
+      data.serviceBases = data.serviceBases.filter((s: any) => s.id !== service.id);
+      data.services = data.services.filter((s) => s.serviceBaseId !== service.id);
+      await DataService.saveAllData(data);
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting service:', error);
+      alert('❌ Failed to delete service');
+    }
   };
 
   return (
@@ -549,6 +592,25 @@ export default function AdminPage() {
           }}
           initialDebt={editingDebt}
           initialSubpayments={editingDebtSubpayments}
+        />
+      </Modal>
+
+      {/* SERVICE BASE FORM MODAL */}
+      <Modal
+        isOpen={showServiceBaseForm}
+        onClose={() => {
+          setShowServiceBaseForm(false);
+          setEditingServiceBase(undefined);
+        }}
+        title={editingServiceBase ? 'Edit Service' : 'Add Recurring Service'}
+      >
+        <ServiceBaseForm
+          onSave={handleSaveServiceBase}
+          onCancel={() => {
+            setShowServiceBaseForm(false);
+            setEditingServiceBase(undefined);
+          }}
+          initialData={editingServiceBase}
         />
       </Modal>
 

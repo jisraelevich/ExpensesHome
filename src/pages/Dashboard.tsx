@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTable, useCurrentMonth } from '../hooks';
 import { CreditCard, CreditCardMonthly, Investment, InvestmentMonthly, Service, Debt, DebtMonthly, Expense, DollarRate } from '../types';
 import { StorageData } from '../types';

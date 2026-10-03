@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CreditCard } from '../types';
 import { generateId, getCurrentDate } from '../utils/helpers';
 import './forms.css';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Service } from '../types';
 import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
 import './forms.css';
@@ -16,12 +16,29 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
     initialData || {
       type: 'electricity',
       description: '',
+      dueDay: 15,
       dueDate: `${month}-15`,
       amountPesos: 0,
       isPaid: false,
       month,
     }
   );
+
+  const handleDueDayChange = (dueDay: number) => {
+    // Clamp to valid day range
+    const day = Math.max(1, Math.min(31, dueDay));
+    const dueDate = `${month}-${String(day).padStart(2, '0')}`;
+    setFormData({ ...formData, dueDay: day, dueDate });
+  };
+
+  const handleIsPaidChange = (isPaid: boolean) => {
+    if (isPaid && !formData.paidDate) {
+      // Auto-set paidDate to today when marking as paid
+      setFormData({ ...formData, isPaid, paidDate: getCurrentDate().split('T')[0] });
+    } else {
+      setFormData({ ...formData, isPaid });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,15 +48,16 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
       const now = getCurrentDate();
       const service: Service = {
         id: initialData?.id || generateId(),
+        serviceBaseId: initialData?.serviceBaseId,
         type: (formData.type as any) || 'electricity',
         description: formData.description || '',
+        dueDay: formData.dueDay || 15,
         dueDate: formData.dueDate || `${month}-15`,
         amountPesos: formData.amountPesos || 0,
-        amountDollars: formData.amountDollars,
         isPaid: formData.isPaid || false,
         paidDate: formData.paidDate,
         month: formData.month || month,
-        notes: formData.notes,
+        paymentUrl: formData.paymentUrl,
         createdAt: initialData?.createdAt || now,
         updatedAt: now,
       };
@@ -54,44 +72,19 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
     <form onSubmit={handleSubmit} className="form-container">
       <div className="form-grid">
         <div className="form-group">
-          <label>Service Type *</label>
-          <select
-            className="input-field"
-            value={formData.type || 'electricity'}
-            onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
-            required
-          >
-            <option value="electricity">⚡ Electricity</option>
-            <option value="gas">🔥 Gas</option>
-            <option value="phone">📱 Phone</option>
-            <option value="internet">🌐 Internet</option>
-            <option value="water">💧 Water</option>
-            <option value="taxes">📋 Taxes</option>
-            <option value="other">📌 Other</option>
-          </select>
+          <label>Service: {formData.description}</label>
+          <p style={{ margin: '0', fontSize: '12px', color: '#666' }}>{formData.type}</p>
         </div>
 
         <div className="form-group">
-          <label>Description *</label>
+          <label>Due Day of Month *</label>
           <input
-            type="text"
+            type="number"
             className="input-field"
-            value={formData.description || ''}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            onFocus={(e) => e.target.select()}
-            placeholder="e.g., Monthly Bill"
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Due Date *</label>
-          <input
-            type="date"
-            className="input-field"
-            value={formData.dueDate || `${month}-15`}
-            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-            onFocus={(e) => e.target.select()}
+            value={formData.dueDay || 15}
+            onChange={(e) => handleDueDayChange(parseInt(e.target.value) || 15)}
+            min="1"
+            max="31"
             required
           />
         </div>
@@ -111,24 +104,11 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
         </div>
 
         <div className="form-group">
-          <label>Amount (Dollars)</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            className="input-field"
-            value={formatMoneyInput(formData.amountDollars || 0)}
-            onChange={(e) => setFormData({ ...formData, amountDollars: parseMoneyInput(e.target.value) })}
-            onFocus={(e) => e.target.select()}
-            placeholder="0.00"
-          />
-        </div>
-
-        <div className="form-group">
           <label className="checkbox-label">
             <input
               type="checkbox"
               checked={formData.isPaid || false}
-              onChange={(e) => setFormData({ ...formData, isPaid: e.target.checked })}
+              onChange={(e) => handleIsPaidChange(e.target.checked)}
             />
             Mark as Paid
           </label>
@@ -147,24 +127,27 @@ export default function ServiceForm({ month, onSave, onCancel, initialData }: Se
           </div>
         )}
 
-        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Notes</label>
-          <textarea
-            className="input-field"
-            value={formData.notes || ''}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            onFocus={(e) => e.target.select()}
-            placeholder="Optional notes"
-            rows={2}
-          />
-        </div>
+        {formData.paymentUrl && (
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+            <label>Payment Link</label>
+            <a
+              href={formData.paymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button button-secondary"
+              style={{ textDecoration: 'none', display: 'inline-block' }}
+            >
+              🔗 Pay Now
+            </a>
+          </div>
+        )}
       </div>
 
       <div className="form-actions">
         <button type="submit" className="button button-primary" disabled={loading}>
-          {loading ? 'Saving...' : 'Save Service'}
+          {loading ? 'Saving...' : initialData ? 'Update Service' : 'Add Service'}
         </button>
-        <button type="button" className="button button-secondary" onClick={onCancel}>
+        <button type="button" className="button button-secondary" onClick={onCancel} disabled={loading}>
           Cancel
         </button>
       </div>

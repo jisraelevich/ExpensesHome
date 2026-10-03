@@ -2,7 +2,6 @@ import {
   CreditCard,
   Investment,
   InvestmentMonthly,
-  CarSavings,
   DollarRate,
   Service,
   Debt,
@@ -25,13 +24,13 @@ interface StorageData {
   creditCardsMonthly: any[];
   investments: Investment[];
   investmentsMonthly: InvestmentMonthly[];
-  carSavings: CarSavings[];
   dollarRates: DollarRate[];
   services: Service[];
   debts: Debt[];
   debtsMonthly: DebtMonthly[];
   debtSubpayments: DebtSubpayment[];
   expenses: Expense[];
+  serviceBases: any[];
   config: AppConfig;
 }
 
@@ -52,6 +51,8 @@ const DEFAULT_CONFIG: AppConfig = {
 };
 
 class DataService {
+  private static isSaving = false; // Prevent concurrent saves during startup
+
   /**
    * Load all data from storage
    */
@@ -61,10 +62,34 @@ class DataService {
       if (stored) {
         let data = JSON.parse(stored);
         
-        // Migration: Remove admin tab from config if it exists
-        if (data.config?.tabs) {
-          data.config.tabs = data.config.tabs.filter((tab: any) => tab.id !== 'admin');
-          await this.saveAllData(data);
+        // Ensure all required fields exist (for old data compatibility)
+        const defaults = this.getDefaultData();
+        data = {
+          creditCards: data.creditCards ?? defaults.creditCards,
+          creditCardsMonthly: data.creditCardsMonthly ?? defaults.creditCardsMonthly,
+          investments: data.investments ?? defaults.investments,
+          investmentsMonthly: data.investmentsMonthly ?? defaults.investmentsMonthly,
+          dollarRates: data.dollarRates ?? defaults.dollarRates,
+          services: data.services ?? defaults.services,
+          debts: data.debts ?? defaults.debts,
+          debtsMonthly: data.debtsMonthly ?? defaults.debtsMonthly,
+          debtSubpayments: data.debtSubpayments ?? defaults.debtSubpayments,
+          expenses: data.expenses ?? defaults.expenses,
+          serviceBases: data.serviceBases ?? defaults.serviceBases,
+          config: data.config ?? defaults.config,
+        };
+        
+        // Migration: Remove admin tab from config (only run once)
+        const migrationKey = `${STORAGE_KEY_PREFIX}migration_v1_admin_tab_removed`;
+        if (!localStorage.getItem(migrationKey) && data.config?.tabs) {
+          const hasAdminTab = data.config.tabs.some((tab: any) => tab.id === 'admin');
+          if (hasAdminTab) {
+            data.config.tabs = data.config.tabs.filter((tab: any) => tab.id !== 'admin');
+            // Save without triggering backup (it's just a migration)
+            localStorage.setItem(STORAGE_KEY_PREFIX + 'all', JSON.stringify(data));
+            localStorage.setItem(migrationKey, 'true');
+            console.log('✅ Migration: Removed admin tab from config');
+          }
         }
         
         return data;
@@ -82,7 +107,7 @@ class DataService {
   public static async loadTable<T>(tableName: keyof StorageData): Promise<T[]> {
     try {
       const data = await this.loadAllData();
-      return data[tableName] as T[];
+      return data[tableName] as T[] || [];
     } catch (error) {
       console.error(`Error loading ${tableName}:`, error);
       return [];
@@ -91,15 +116,12 @@ class DataService {
 
   /**
    * Save entire dataset with safety checks
-   * - Auto-backup BEFORE saving
    * - Validate data integrity
    * - Prevent data loss
+   * - NOTE: Automatic backups are DISABLED. Use manual backups only.
    */
   public static async saveAllData(data: StorageData): Promise<void> {
     try {
-      // CRITICAL: Backup BEFORE saving (not after)
-      await this.createAutoBackup();
-
       // Validate data integrity - prevent catastrophic loss
       const currentData = this.loadAllDataSync();
       this.validateDataIntegrity(currentData, data);
@@ -107,9 +129,9 @@ class DataService {
       // Now save the new data
       localStorage.setItem(STORAGE_KEY_PREFIX + 'all', JSON.stringify(data));
 
-      console.log('✅ Data saved safely with backup protection');
+      console.log('✅ Data saved successfully');
     } catch (error) {
-      console.error('❌ ERROR SAVING DATA - Backup created for recovery:', error);
+      console.error('❌ ERROR SAVING DATA:', error);
       throw error;
     }
   }
@@ -230,13 +252,13 @@ class DataService {
       creditCardsMonthly: [],
       investments: [],
       investmentsMonthly: [],
-      carSavings: [],
       dollarRates: [],
       services: [],
       debts: [],
       debtsMonthly: [],
       debtSubpayments: [],
       expenses: [],
+      serviceBases: [],
       config: DEFAULT_CONFIG,
     };
   }
@@ -440,10 +462,7 @@ class DataService {
             return;
           }
 
-          // Auto-backup before import
-          await this.createAutoBackup();
-
-          // Save imported data
+          // Save imported data (no automatic backup)
           await this.saveAllData(jsonData);
           resolve(true);
         } catch (error) {
@@ -456,40 +475,167 @@ class DataService {
   }
 
   /**
-   * Create timestamped auto-backup in localStorage (keep last 5)
+   * Get today's date in YYYY-MM-DD format
    */
-  public static async createAutoBackup(): Promise<string> {
+  private static getTodayDate(): string {
+    const now = new Date();
+    return now.toISOString().split('T')[0];
+  }
+
+  /**
+   * Check if we should create an auto-backup (max once per day)
+   * This uses atomic flag setting to prevent race conditions at startup
+   */
+  private static shouldCreateAutoBackup(): boolean {
+    const today = this.getTodayDate();
+    const lastBackupDate = localStorage.getItem(`${STORAGE_KEY_PREFIX}last_backup_date`);
+    
+    console.log(`🔍 Backup check - Today: ${today}, Last backup: ${lastBackupDate}`);
+    
+    // If backup already done today, skip
+    if (lastBackupDate === today) {
+      console.log(`⏭️ Backup already created today - SKIPPING`);
+      return false;
+    }
+    
+    // Mark backup as in-progress for today (atomic to prevent race conditions)
+    // This prevents multiple saves at startup from each creating a backup
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}last_backup_date`, today);
+    console.log(`✅ Daily flag set, creating backup...`);
+    return true;
+  }
+
+  /**
+   * Create auto-backup only if needed (once per day max)
+   */
+  public static async createAutoBackupIfNeeded(): Promise<string | null> {
+    try {
+      // Double-check we should create backup (prevents race conditions)
+      if (!this.shouldCreateAutoBackup()) {
+        return null;
+      }
+
+      const data = await this.loadAllData();
+      // Use timestamp with milliseconds + random suffix to ensure uniqueness
+      const now = new Date();
+      const isoString = now.toISOString();
+      const randomSuffix = Math.random().toString(36).substring(2, 6);
+      const backupKey = `${STORAGE_KEY_PREFIX}backup_${isoString}_${randomSuffix}`;
+      
+      // Only backup if we have actual data (not empty default state)
+      const hasData = data.creditCards.length > 0 || 
+                      data.investments.length > 0 ||
+                      data.debts.length > 0 ||
+                      data.expenses.length > 0;
+
+      if (hasData) {
+        localStorage.setItem(backupKey, JSON.stringify(data));
+        this.cleanOldBackups(100);
+        console.log(`💾 Auto-backup created (once per day): ${isoString}`);
+        return backupKey;
+      } else {
+        console.log('⏭️ No auto-backup created (no data yet)');
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Error creating auto-backup:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create on-demand backup (always creates, bypasses daily limit)
+   */
+  public static async createManualBackup(): Promise<string> {
     try {
       const data = await this.loadAllData();
       const timestamp = new Date().toISOString();
       const backupKey = `${STORAGE_KEY_PREFIX}backup_${timestamp}`;
       
       localStorage.setItem(backupKey, JSON.stringify(data));
-
-      // Keep last 20 backups (increased from 5 for better recovery)
-      const allKeys = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith(`${STORAGE_KEY_PREFIX}backup_`)) {
-          allKeys.push(key);
-        }
-      }
-
-      // Sort and keep only last 20
-      if (allKeys.length > 20) {
-        const toDelete = allKeys.sort().slice(0, -20);
-        toDelete.forEach(key => {
-          localStorage.removeItem(key!);
-          console.log(`🗑️ Cleaned old backup: ${key}`);
-        });
-      }
-
-      console.log(`💾 Auto-backup created: ${timestamp}`);
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}last_backup_date`, this.getTodayDate());
+      
+      // Keep last 100 backups
+      this.cleanOldBackups(100);
+      
+      console.log(`💾 Manual backup created: ${timestamp}`);
       return backupKey;
     } catch (error) {
-      console.error('❌ Error creating auto-backup:', error);
+      console.error('❌ Error creating manual backup:', error);
       throw error;
     }
+  }
+
+  /**
+   * Clean old backups, keeping only the most recent N
+   */
+  private static cleanOldBackups(keepCount: number): void {
+    const allKeys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(`${STORAGE_KEY_PREFIX}backup_`)) {
+        allKeys.push(key);
+      }
+    }
+
+    if (allKeys.length === 0) return;
+
+    // Group backups by date
+    const backupsByDate: { [date: string]: string[] } = {};
+    allKeys.forEach((key) => {
+      // Extract date from key: "expenses_2026_backup_2026-10-01T19:22:24.123Z_xyz"
+      const dateMatch = key.match(/backup_(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch) {
+        const date = dateMatch[1];
+        if (!backupsByDate[date]) {
+          backupsByDate[date] = [];
+        }
+        backupsByDate[date].push(key);
+      }
+    });
+
+    // For each day, keep only the first (oldest) backup and delete duplicates
+    const toDelete: string[] = [];
+    Object.values(backupsByDate).forEach((backupsForDay) => {
+      if (backupsForDay.length > 1) {
+        // Sort chronologically and delete all but the first
+        const sorted = backupsForDay.sort();
+        const duplicates = sorted.slice(1);
+        toDelete.push(...duplicates);
+        console.log(`🗑️ Removing ${duplicates.length} duplicate backup(s) from date ${backupsForDay[0].split('backup_')[1]?.substring(0, 10)}`);
+      }
+    });
+
+    // Also remove old backups if we have more than keepCount total
+    const sortedByDate = allKeys.sort();
+    if (sortedByDate.length > keepCount) {
+      const oldBackups = sortedByDate.slice(0, -keepCount);
+      toDelete.push(...oldBackups.filter(key => !toDelete.includes(key)));
+    }
+
+    // Delete all marked backups
+    const uniqueToDelete = [...new Set(toDelete)];
+    uniqueToDelete.forEach((key) => {
+      localStorage.removeItem(key);
+      console.log(`🗑️ Deleted backup: ${key.substring(0, 60)}...`);
+    });
+
+    if (uniqueToDelete.length > 0) {
+      console.log(`✅ Cleanup complete: removed ${uniqueToDelete.length} backup(s), kept ${sortedByDate.length - uniqueToDelete.length}`);
+    }
+  }
+
+  /**
+   * Legacy: Create auto-backup (kept for backward compatibility, use createAutoBackupIfNeeded)
+   * @deprecated Use createAutoBackupIfNeeded() instead
+   */
+  public static async createAutoBackup(): Promise<string> {
+    const result = await this.createAutoBackupIfNeeded();
+    if (result) return result;
+    
+    // If daily limit reached, still return a valid key for compatibility
+    const backups = this.getBackupsList();
+    return backups.length > 0 ? backups[0].key : `${STORAGE_KEY_PREFIX}backup_none`;
   }
 
   /**

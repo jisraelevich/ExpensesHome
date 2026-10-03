@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run build && vite",
+    "dev:clean": "taskkill /F /IM node.exe >nul 2>&1 & timeout /t 1 >nul & npm run build && vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx"

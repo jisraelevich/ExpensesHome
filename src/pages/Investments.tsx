@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTable } from '../hooks';
 import { Investment, InvestmentMonthly } from '../types';
 import Modal from '../components/Modal';
@@ -43,8 +43,8 @@ export default function InvestmentsPage({ month, onRefresh }: InvestmentsPagePro
             currentPaymentNumber: paymentNumber,
             amountPerPayment: amount,
             isPaid: false,
-            paidDate: undefined,
-            comment: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
         }
       }
@@ -258,7 +258,7 @@ export default function InvestmentsPage({ month, onRefresh }: InvestmentsPagePro
                 {monthly ? (
                   <div style={{ borderTop: '1px solid #eee', paddingTop: '8px' }}>
                     <div style={{ fontSize: '11px', color: '#666', marginBottom: '6px' }}>
-                      <strong>Payment:</strong> {monthly.currentPaymentNumber} / {investment.totalPayments}
+                      <strong>Payment:</strong> {monthly.currentPaymentNumber} / {investment.totalPayments} ({Math.round((monthly.currentPaymentNumber / investment.totalPayments) * 100)}%)
                     </div>
 
                     {/* Amount (Clickable) */}

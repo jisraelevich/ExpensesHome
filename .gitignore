@@ -24,3 +24,10 @@ Thumbs.db
 .cache/
 build/
 out/
+
+# Generated JS files (compiled from TypeScript)
+src/**/*.js
+!src/**/*.d.ts
+
+# Batch files
+*.bat

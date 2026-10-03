@@ -55,19 +55,6 @@ export interface InvestmentMonthly {
   updatedAt: string;
 }
 
-// ========== CAR SAVINGS TABLE ==========
-export interface CarSavings {
-  id: string;
-  month: string; // 'YYYY-MM'
-  amountPesos: number;
-  amountDollars?: number;
-  isPaid: boolean;
-  paidDate?: string;
-  comment?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // ========== DOLLAR RATE TABLE ==========
 export interface DollarRate {
   id: string;
@@ -80,18 +67,31 @@ export interface DollarRate {
   updatedAt: string;
 }
 
-// ========== SERVICES TABLE (Utilities, Bills) ==========
-export interface Service {
+// ========== SERVICES BASE (Admin - Recurring definitions) ==========
+export interface ServiceBase {
   id: string;
   type: 'electricity' | 'gas' | 'phone' | 'water' | 'internet' | 'taxes' | 'other';
+  description: string; // e.g., "EDESA", "CLARO", "AFIP", "CAR TAX"
+  paymentUrl?: string; // URL where to pay (e.g., https://www.edesa.com.ar/pagar)
+  startMonth: string; // 'YYYY-MM' - When this service starts (appears in this month and all future months)
+  isActive: boolean; // Can be hidden/archived
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ========== SERVICES TABLE (Monthly instances) ==========
+export interface Service {
+  id: string;
+  serviceBaseId?: string; // Link to ServiceBase if recurring
+  type: 'electricity' | 'gas' | 'phone' | 'water' | 'internet' | 'taxes' | 'other';
   description: string;
-  dueDate: string; // 'YYYY-MM-DD'
-  amountPesos: number;
-  amountDollars?: number;
+  dueDay: number; // Day of month (1-31) - editable per month
+  dueDate: string; // 'YYYY-MM-DD' - Full date (constructed from dueDay + month)
+  amountPesos: number; // Amount in ARS - editable per month
   isPaid: boolean;
-  paidDate?: string; // 'YYYY-MM-DD'
+  paidDate?: string; // 'YYYY-MM-DD' - Auto-set to today when marked paid, can be modified
   month: string; // 'YYYY-MM'
-  notes?: string;
+  paymentUrl?: string; // URL where to pay (copied from ServiceBase)
   createdAt: string;
   updatedAt: string;
 }
@@ -101,6 +101,7 @@ export interface Debt {
   id: string;
   name: string; // e.g., "Car Loan", "Personal Loan"
   isActive: boolean; // Can be hidden/archived
+  isExpense?: boolean; // Track as expense in Expenses tab
   createdAt: string;
   updatedAt: string;
 }
@@ -153,6 +154,7 @@ export interface Expense {
   creditCardId?: string; // Link to CreditCard if applicable
   category?: string; // Optional categorization
   notes?: string;
+  isFromRule?: boolean; // true if auto-generated from a rule (read-only except status)
   createdAt: string;
   updatedAt: string;
 }
@@ -163,7 +165,6 @@ export interface MonthlySummary {
   year: number;
   creditCardTotal: number;
   investmentTotal: number;
-  carSavingsTotal: number;
   servicesTotal: number;
   debtsTotal: number;
   expensesTotal: number;
@@ -207,23 +208,22 @@ export interface AuthState {
 
 // ========== STORAGE DATA ==========
 export interface StorageData {
-  // User
-  currentUserId: string | null; // Current logged-in user
-  
   // Base entities (static info)
   creditCards: CreditCard[];
   investments: Investment[];
+  debts: Debt[];
+  serviceBases: ServiceBase[];
   
   // Monthly variations (dynamic per month)
   creditCardsMonthly: CreditCardMonthly[];
   investmentsMonthly: InvestmentMonthly[];
-  
-  // Other tables (monthly entries)
-  carSavings: CarSavings[];
   dollarRates: DollarRate[];
   services: Service[];
-  debts: Debt[];
   expenses: Expense[];
+  
+  // Debt sub-payments and monthly tracking
+  debtSubpayments: DebtSubpayment[];
+  debtsMonthly: DebtMonthly[];
   
   // Config
   config: AppConfig;

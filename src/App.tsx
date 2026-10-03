@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppData, useCurrentMonth, useAuth } from './hooks';
 import { getPreviousMonth, getNextMonth } from './utils/helpers';
 import './styles/global.css';

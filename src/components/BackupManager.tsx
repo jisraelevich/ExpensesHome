@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import DataService from '../services/DataService';
 import '../components/forms.css';
 
@@ -53,7 +53,7 @@ export default function BackupManager({ onClose }: BackupManagerProps) {
   const handleCreateBackup = async () => {
     setIsLoading(true);
     try {
-      await DataService.createAutoBackup();
+      await DataService.createManualBackup();
       setMessage({ type: 'success', text: '✅ Backup created successfully!' });
       loadBackups();
       setTimeout(() => setMessage(null), 3000);
@@ -164,7 +164,6 @@ export default function BackupManager({ onClose }: BackupManagerProps) {
             style={{ display: 'none' }}
           />
           <button
-            as="span"
             onClick={(e) => (e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement)?.click()}
             disabled={isLoading}
             style={{
@@ -305,13 +304,14 @@ export default function BackupManager({ onClose }: BackupManagerProps) {
           border: '1px solid #ffeaa7',
         }}
       >
-        <strong>💡 How to stay safe:</strong>
+        <strong>💡 How backups work:</strong>
         <ul style={{ margin: '8px 0 0 20px', paddingLeft: 0 }}>
-          <li>Click "Create Backup Now" regularly (manual backup)</li>
-          <li>Auto-backup runs before importing data</li>
-          <li>Keep last 5 backups in browser storage</li>
-          <li>Always export before major changes</li>
-          <li>Store exported files in cloud (Google Drive, Dropbox, etc.)</li>
+          <li>⏰ Auto-backup: Once per day, before any data changes</li>
+          <li>🔄 Manual backup: "Create Backup Now" - unlimited, anytime</li>
+          <li>📥 Before import: Auto-backup always created</li>
+          <li>💾 Storage: Keep last 20 backups</li>
+          <li>📁 Export: Click "Export to File" to save as JSON</li>
+          <li>☁️ Recommended: Store exported files in cloud (Google Drive, Dropbox, etc.)</li>
         </ul>
       </div>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Debt, DebtSubpayment } from '../types';
 import { generateId, getCurrentDate } from '../utils/helpers';
 import './forms.css';
@@ -45,9 +45,9 @@ export default function DebtBaseForm({
       debtId: initialDebt?.id || '', // Will be set when debt is created
       description: newSubpayment.description.trim(),
       startDate: newSubpayment.startDate,
-      amountARS: newSubpayment.amountARS,
-      amountUSD: newSubpayment.amountUSD,
-      totalPayments: newSubpayment.totalPayments,
+      amountARS: newSubpayment.amountARS ?? 0,
+      amountUSD: newSubpayment.amountUSD ?? 0,
+      totalPayments: newSubpayment.totalPayments ?? 0,
       isActive: true,
       createdAt: getCurrentDate(),
       updatedAt: getCurrentDate(),
@@ -91,11 +91,11 @@ export default function DebtBaseForm({
     const updated = [...subpayments];
     updated[editingIndex] = {
       ...updated[editingIndex],
-      description: editingData.description.trim(),
+      description: editingData.description?.trim() || updated[editingIndex].description,
       startDate: editingData.startDate || updated[editingIndex].startDate,
-      amountARS: editingData.amountARS ?? updated[editingIndex].amountARS,
-      amountUSD: editingData.amountUSD ?? updated[editingIndex].amountUSD,
-      totalPayments: editingData.totalPayments ?? updated[editingIndex].totalPayments,
+      amountARS: (editingData.amountARS ?? updated[editingIndex].amountARS) ?? 0,
+      amountUSD: (editingData.amountUSD ?? updated[editingIndex].amountUSD) ?? 0,
+      totalPayments: (editingData.totalPayments ?? updated[editingIndex].totalPayments) ?? 0,
       updatedAt: getCurrentDate(),
     };
     setSubpayments(updated);
@@ -135,10 +135,13 @@ export default function DebtBaseForm({
       updatedAt: getCurrentDate(),
     };
 
-    // Update debtId for all subpayments
+    // Update debtId for all subpayments and ensure 0 defaults
     const updatedSubpayments = subpayments.map((sp) => ({
       ...sp,
       debtId: debt.id,
+      amountARS: sp.amountARS ?? 0,
+      amountUSD: sp.amountUSD ?? 0,
+      totalPayments: sp.totalPayments ?? 0,
     }));
 
     console.log('🔍 DebtBaseForm.handleSave calling onSave:', { debtId: debt.id, debtName: debt.name, subpaymentCount: updatedSubpayments.length, updatedSubpayments });

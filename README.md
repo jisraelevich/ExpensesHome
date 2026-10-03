@@ -4,10 +4,9 @@ A modern, responsive expense management app for tracking monthly finances with s
 
 ## Features
 
-✅ **7 Main Modules:**
+✅ **6 Main Modules:**
 - 💳 **Credit Cards** - Track payments by bank, close date, due date, amounts in ARS/USD
 - 📈 **Investments/Insurance** - Track investments, insurance policies by broker with payment progress
-- 🚗 **Car Savings** - Monthly car fund contributions
 - 💵 **Dollar Rates** - Track USD/ARS exchange rates with MEP corrections
 - 🧾 **Services/Bills** - Electricity, gas, phone, internet, taxes, etc.
 - 📝 **Debts** - Track debts with flexible payment schedules (0=ongoing, 1=one-time, n=specific months)

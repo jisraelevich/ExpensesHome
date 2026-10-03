@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTable } from '../hooks';
 import { DollarRate } from '../types';
 import { generateId, getCurrentDate, formatMoneyInput, parseMoneyInput } from '../utils/helpers';
