@@ -18,7 +18,7 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
       description: '',
       amountPesos: 0,
       amountDollars: 0,
-      status: 'now',
+      status: 'later',
       fromCreditCard: false,
       month,
     }
@@ -44,7 +44,7 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
         description: formData.description || '',
         amountPesos: formData.amountPesos || 0,
         amountDollars: formData.amountDollars || 0,
-        status: (formData.status as 'done' | 'now' | 'later') || 'now',
+        status: (formData.status as 'done' | 'now' | 'later') || 'later',
         month: formData.month || month,
         fromCreditCard: formData.fromCreditCard || false,
         creditCardId: formData.creditCardId,
@@ -118,18 +118,34 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
 
         <div className="form-group">
           <label>Status *</label>
-          <select
-            className="input-field"
-            value={formData.status || 'now'}
-            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-            required
-          >
-            <option value="done">Done (Already Paid)</option>
-            <option value="now">Now (Pay Now)</option>
-            <option value="later">Later (Plan for Later)</option>
-          </select>
+          <div className="status-button-group">
+            <button
+              type="button"
+              data-status="later"
+              className={`${formData.status === 'later' ? 'active' : ''}`}
+              onClick={() => setFormData({ ...formData, status: 'later' })}
+            >
+              📅 Later
+            </button>
+            <button
+              type="button"
+              data-status="now"
+              className={`${formData.status === 'now' ? 'active' : ''}`}
+              onClick={() => setFormData({ ...formData, status: 'now' })}
+            >
+              ⏳ Now
+            </button>
+            <button
+              type="button"
+              data-status="done"
+              className={`${formData.status === 'done' ? 'active' : ''}`}
+              onClick={() => setFormData({ ...formData, status: 'done' })}
+            >
+              ✅ Done
+            </button>
+          </div>
           <small style={{ color: '#999' }}>
-            done = paid • now = pay today • later = future payment
+            📅 Later = future payment • ⏳ Now = pay today • ✅ Done = already paid
           </small>
         </div>
 

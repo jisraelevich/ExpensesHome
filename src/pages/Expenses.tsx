@@ -40,7 +40,7 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
             amountPesos: cc.amountPesos,
             amountDollars: cc.amountDollars,
             category: 'Credit Card',
-            status: 'now',
+            status: 'later',
             fromCreditCard: true,
             month,
             isFromRule: true,
@@ -74,7 +74,7 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
               amountPesos: totalAmount,
               amountDollars: totalUSD,
               category: 'Debts',
-              status: 'now',
+              status: 'later',
               fromCreditCard: false,
               month,
               isFromRule: true,
@@ -194,6 +194,14 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
   const totalPesos = currentMonth.reduce((sum, exp) => sum + exp.amountPesos, 0);
   const totalDollars = currentMonth.reduce((sum, exp) => sum + exp.amountDollars, 0);
 
+  // Calculate totals by status
+  const laterPesos = currentMonth.filter(exp => exp.status === 'later').reduce((sum, exp) => sum + exp.amountPesos, 0);
+  const laterDollars = currentMonth.filter(exp => exp.status === 'later').reduce((sum, exp) => sum + exp.amountDollars, 0);
+  const nowPesos = currentMonth.filter(exp => exp.status === 'now').reduce((sum, exp) => sum + exp.amountPesos, 0);
+  const nowDollars = currentMonth.filter(exp => exp.status === 'now').reduce((sum, exp) => sum + exp.amountDollars, 0);
+  const donePesos = currentMonth.filter(exp => exp.status === 'done').reduce((sum, exp) => sum + exp.amountPesos, 0);
+  const doneDollars = currentMonth.filter(exp => exp.status === 'done').reduce((sum, exp) => sum + exp.amountDollars, 0);
+
   return (
     <div className="page">
       <div className="page-header">
@@ -230,19 +238,50 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
         </div>
       ) : (
         <>
-          {/* Summary */}
+          {/* Summary - 4 sections: ALL, Later, Now, Done */}
           <div className="card">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-              <div>
-                <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#666' }}>Total (Pesos)</p>
-                <p style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>
+              {/* ALL */}
+              <div style={{ padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '6px', borderLeft: '4px solid #333' }}>
+                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>ALL</p>
+                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600 }}>
                   ${totalPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
-              </div>
-              <div>
-                <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#666' }}>Total (Dollars)</p>
-                <p style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>
+                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
                   ${totalDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              {/* LATER */}
+              <div style={{ padding: '12px', backgroundColor: '#f3f0ff', borderRadius: '6px', borderLeft: '4px solid #8b5cf6' }}>
+                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>📅 LATER</p>
+                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600, color: '#8b5cf6' }}>
+                  ${laterPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
+                  ${laterDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              {/* NOW */}
+              <div style={{ padding: '12px', backgroundColor: '#fffbf0', borderRadius: '6px', borderLeft: '4px solid #f59e0b' }}>
+                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>⏳ NOW</p>
+                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600, color: '#f59e0b' }}>
+                  ${nowPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
+                  ${nowDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              {/* DONE */}
+              <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderRadius: '6px', borderLeft: '4px solid #10b981' }}>
+                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>✅ DONE</p>
+                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600, color: '#10b981' }}>
+                  ${donePesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
+                  ${doneDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -281,122 +320,66 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
                       {/* Expenses under category */}
                       {expenses.map((exp) => (
                         <tr key={exp.id} style={{ backgroundColor: exp.isFromRule ? '#f5f5f5' : 'transparent' }}>
-                          <td>
-                            <input
-                              type="text"
-                              disabled={exp.isFromRule}
-                              style={{
-                                width: '100%',
-                                padding: '4px',
-                                border: exp.isFromRule ? 'none' : '1px solid #ccc',
-                                borderRadius: '4px',
-                                backgroundColor: exp.isFromRule ? 'transparent' : '#fff',
-                                cursor: exp.isFromRule ? 'not-allowed' : 'text',
-                                opacity: exp.isFromRule ? 0.7 : 1,
-                              }}
-                              value={exp.description}
-                              onChange={(e) => !exp.isFromRule && handleEditDescription(exp.id, e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              disabled={exp.isFromRule}
-                              style={{
-                                width: '80px',
-                                padding: '4px',
-                                border: exp.isFromRule ? 'none' : '1px solid #ccc',
-                                borderRadius: '4px',
-                                backgroundColor: exp.isFromRule ? 'transparent' : '#fff',
-                                cursor: exp.isFromRule ? 'not-allowed' : 'text',
-                                opacity: exp.isFromRule ? 0.7 : 1,
-                              }}
-                              value={exp.amountPesos}
-                              onChange={(e) => !exp.isFromRule && handleEditAmountPesos(exp.id, parseFloat(e.target.value) || 0)}
-                              step="0.01"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              disabled={exp.isFromRule}
-                              style={{
-                                width: '80px',
-                                padding: '4px',
-                                border: exp.isFromRule ? 'none' : '1px solid #ccc',
-                                borderRadius: '4px',
-                                backgroundColor: exp.isFromRule ? 'transparent' : '#fff',
-                                cursor: exp.isFromRule ? 'not-allowed' : 'text',
-                                opacity: exp.isFromRule ? 0.7 : 1,
-                              }}
-                              value={exp.amountDollars}
-                              onChange={(e) => !exp.isFromRule && handleEditAmountDollars(exp.id, parseFloat(e.target.value) || 0)}
-                              step="0.01"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              disabled={exp.isFromRule}
-                              style={{
-                                width: '80px',
-                                padding: '4px',
-                                border: exp.isFromRule ? 'none' : '1px solid #ccc',
-                                borderRadius: '4px',
-                                backgroundColor: exp.isFromRule ? 'transparent' : '#fff',
-                                cursor: exp.isFromRule ? 'not-allowed' : 'text',
-                                opacity: exp.isFromRule ? 0.7 : 1,
-                              }}
-                              placeholder="-"
-                              value={exp.category || ''}
-                              onChange={(e) => !exp.isFromRule && handleEditCategory(exp.id, e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <select
-                              style={{
-                                padding: '4px',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                width: '80px',
-                                backgroundColor: '#fff',
-                                cursor: 'pointer',
-                              }}
-                              value={exp.status}
-                              onChange={(e) => handleEditStatus(exp.id, e.target.value as 'done' | 'now' | 'later')}
-                            >
-                              <option value="done\">✅ Done</option>
-                              <option value="now\">⏳ Now</option>
-                              <option value="later\">📅 Later</option>
-                            </select>
-                          </td>
-                          <td>
-                            <label style={{ cursor: exp.isFromRule ? 'not-allowed' : 'pointer', opacity: exp.isFromRule ? 0.5 : 1 }}>
-                              <input
-                                type="checkbox"
-                                disabled={exp.isFromRule}
-                                checked={exp.fromCreditCard}
-                                onChange={(e) => !exp.isFromRule && handleEditFromCreditCard(exp.id, e.target.checked)}
-                              />
-                              {exp.fromCreditCard ? '✓' : '-'}
-                            </label>
-                          </td>
-                          <td>
-                            {!exp.isFromRule && (
-                              <button
-                                className="button button-small"
-                                onClick={() => {
-                                  setSelectedExpense(exp);
-                                  setShowForm(true);
-                                }}
-                              >
-                                ✏️ Edit
-                              </button>
-                            )}
-                            {exp.isFromRule && (
-                              <span style={{ fontSize: '11px', color: '#999' }}>🔒 Rule</span>
-                            )}
-                          </td>
+                          {exp.isFromRule ? (
+                            <>
+                              <td style={{ fontSize: '12px', fontWeight: '500', padding: '4px 2px' }}>
+                                {exp.description || '-'}
+                              </td>
+                              <td style={{ fontSize: '12px', fontFamily: 'monospace', textAlign: 'right', padding: '4px 2px' }}>
+                                ${exp.amountPesos.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ fontSize: '12px', fontFamily: 'monospace', textAlign: 'right', padding: '4px 2px' }}>
+                                ${exp.amountDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ fontSize: '12px', color: '#666', padding: '4px 2px' }}>
+                                {exp.category || '-'}
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <div className="status-button-group inline">
+                                  <button type="button" data-status="later" className={`${exp.status === 'later' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'later')}>📅</button>
+                                  <button type="button" data-status="now" className={`${exp.status === 'now' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'now')}>⏳</button>
+                                  <button type="button" data-status="done" className={`${exp.status === 'done' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'done')}>✅</button>
+                                </div>
+                              </td>
+                              <td style={{ textAlign: 'center', fontSize: '12px', color: '#999', padding: '4px 2px' }}>
+                                {exp.fromCreditCard ? '✓' : '-'}
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <span style={{ fontSize: '11px', color: '#999' }}>🔒</span>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td style={{ padding: '4px 2px' }}>
+                                <input type="text" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} placeholder="Description" value={exp.description} onChange={(e) => handleEditDescription(exp.id, e.target.value)} />
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <input type="number" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', textAlign: 'right', fontFamily: 'monospace', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} value={exp.amountPesos} onChange={(e) => handleEditAmountPesos(exp.id, parseFloat(e.target.value) || 0)} step="0.01" placeholder="0.00" />
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <input type="number" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', textAlign: 'right', fontFamily: 'monospace', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} value={exp.amountDollars} onChange={(e) => handleEditAmountDollars(exp.id, parseFloat(e.target.value) || 0)} step="0.01" placeholder="0.00" />
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <input type="text" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} placeholder="Category" value={exp.category || ''} onChange={(e) => handleEditCategory(exp.id, e.target.value)} />
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <div className="status-button-group inline">
+                                  <button type="button" data-status="later" className={`${exp.status === 'later' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'later')}>📅</button>
+                                  <button type="button" data-status="now" className={`${exp.status === 'now' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'now')}>⏳</button>
+                                  <button type="button" data-status="done" className={`${exp.status === 'done' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'done')}>✅</button>
+                                </div>
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <label style={{ cursor: 'pointer' }}>
+                                  <input type="checkbox" checked={exp.fromCreditCard} onChange={(e) => handleEditFromCreditCard(exp.id, e.target.checked)} />
+                                  {exp.fromCreditCard ? '✓' : '-'}
+                                </label>
+                              </td>
+                              <td style={{ padding: '4px 2px' }}>
+                                <button className="button button-small" onClick={() => { setSelectedExpense(exp); setShowForm(true); }}>✏️</button>
+                              </td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </React.Fragment>

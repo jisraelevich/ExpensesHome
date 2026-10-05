@@ -11,7 +11,7 @@ interface DebtsPageProps {
 }
 
 export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
-  const { items: debts, updateItem: updateDebt } = useTable<Debt>('debts');
+  const { items: debts } = useTable<Debt>('debts');
   const { items: debtsMonthly, updateItem: updateMonthly, addItem: addMonthly } = useTable<DebtMonthly>('debtsMonthly');
   const { items: subpayments } = useTable<DebtSubpayment>('debtSubpayments');
   const [selectedMonthly, setSelectedMonthly] = useState<DebtMonthly | undefined>();
@@ -98,7 +98,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
 
       message += `• ${currentDescription} ${paymentLabel}\n`;
       message += `  ARS: $${sp.amountARS.toLocaleString('en-US')}\n`;
-      if (typeof sp.amountUSD === 'number' && sp.amountUSD > 0) {
+      if (sp.amountUSD > 0) {
         message += `  USD: $${sp.amountUSD.toFixed(2)}\n`;
       }
       message += `\n`;
@@ -106,7 +106,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
 
     message += `━━━━━━━━━━━━━━━━\n`;
     message += `*Total ARS:* $${totalARS.toLocaleString('en-US')}\n`;
-    if (typeof totalUSD === 'number' && totalUSD > 0) {
+    if (totalUSD > 0) {
       message += `*Total USD:* $${totalUSD.toFixed(2)}\n`;
     }
     message += `\n${monthly.isPaid ? '✅ PAID' : '⏳ PENDING'}`;
@@ -340,25 +340,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                 {/* Debt Name */}
                 <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>💳 {debt.name}</span>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={debt.isExpense || false}
-                        onChange={async (e) => {
-                          try {
-                            await updateDebt(debt.id, { isExpense: e.target.checked });
-                            onRefresh();
-                          } catch (error) {
-                            console.error('Error updating debt:', error);
-                          }
-                        }}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <span style={{ fontSize: '11px' }}>Expense</span>
-                    </label>
-                    {monthly?.isPaid && <span style={{ fontSize: '12px', color: '#4CAF50' }}>✓ PAID</span>}
-                  </div>
+                  {monthly?.isPaid && <span style={{ fontSize: '12px', color: '#4CAF50' }}>✓ PAID</span>}
                 </div>
 
                 {/* Payment Info */}
@@ -392,7 +374,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                         (e.currentTarget as HTMLElement).style.borderColor = '#bfdbfe';
                       }}
                     >
-                      {typeof totalUSD === 'number' && totalUSD > 0
+                      {totalUSD > 0 
                         ? `ARS ${totalARS.toLocaleString('en-US')} | USD ${totalUSD.toFixed(2)}`
                         : `ARS ${totalARS.toLocaleString('en-US')}`
                       }
@@ -433,7 +415,7 @@ export default function DebtsPage({ month, onRefresh }: DebtsPageProps) {
                                 {getSubpaymentDescription(sp.subpaymentId)} <span style={{ color: '#999' }}>{paymentLabel}</span>
                               </span>
                               <span style={{ fontWeight: 600 }}>
-                                {typeof sp.amountUSD === 'number' && sp.amountUSD > 0
+                                {sp.amountUSD > 0
                                   ? `$${sp.amountARS.toLocaleString('en-US')} / $${sp.amountUSD.toFixed(2)}`
                                   : `$${sp.amountARS.toLocaleString('en-US')}`
                                 }
