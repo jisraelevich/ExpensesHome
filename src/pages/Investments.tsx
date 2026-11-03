@@ -32,8 +32,8 @@ export default function InvestmentsPage({ month, onRefresh }: InvestmentsPagePro
           const previousMonthly = monthlyItems.find((mi) => mi.investmentId === investment.id && mi.month === previousMonth);
           const amount = previousMonthly?.amountPerPayment || 0;
 
-          // Calculate payment number
-          const paymentNumber = DataService.calculatePaymentNumber(investment.startMonth, month);
+          // Calculate payment number from startDate (actual date field)
+          const paymentNumber = DataService.calculatePaymentNumberFromDate(investment.startDate, month + '-01');
 
           // Create new monthly entry
           await addMonthly({
@@ -257,9 +257,36 @@ export default function InvestmentsPage({ month, onRefresh }: InvestmentsPagePro
                 {/* Payment Info */}
                 {monthly ? (
                   <div style={{ borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#666', marginBottom: '6px' }}>
-                      <strong>Payment:</strong> {monthly.currentPaymentNumber} / {investment.totalPayments} ({Math.round((monthly.currentPaymentNumber / investment.totalPayments) * 100)}%)
-                    </div>
+                    {(() => {
+                      // Calculate total payments and current payment based on dates or manual value
+                      let totalPayments = investment.totalPayments;
+                      let currentPaymentNumber = monthly.currentPaymentNumber;
+                      let paymentInfo = '';
+
+                      // Always recalculate from startDate if it exists
+                      if (investment.startDate) {
+                        currentPaymentNumber = DataService.calculatePaymentNumberFromDate(investment.startDate);
+                        
+                        // If endDate exists, calculate total from date range; otherwise use manual value
+                        if (investment.endDate) {
+                          totalPayments = DataService.calculateTotalPaymentsFromDates(investment.startDate, investment.endDate);
+                          paymentInfo = ` (from ${investment.startDate} to ${investment.endDate})`;
+                        } else {
+                          paymentInfo = ` (started ${investment.startDate})`;
+                        }
+                      }
+
+                      // Ensure current payment doesn't exceed total
+                      if (currentPaymentNumber > totalPayments) {
+                        currentPaymentNumber = totalPayments;
+                      }
+
+                      return (
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '6px' }}>
+                          <strong>Payment:</strong> {currentPaymentNumber} / {totalPayments} ({Math.round((currentPaymentNumber / totalPayments) * 100)}%){paymentInfo}
+                        </div>
+                      );
+                    })()}
 
                     {/* Amount (Clickable) */}
                     <div

@@ -55,7 +55,8 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
   const currentMonthInv = investmentsMonthly.filter((im) => im.month === month && investments.find(inv => inv.id === im.investmentId && inv.isActive));
   const currentMonthDebt = debtsMonthly.filter((dm) => dm.month === month && debts.find(d => d.id === dm.debtId && d.isActive));
   const currentMonthSvc = services.filter((svc) => svc.month === month);
-  const currentMonthExp = expenses.filter((exp) => exp.month === month);
+  // Manual expenses only (exclude auto-generated from credit cards/debts)
+  const currentMonthExp = expenses.filter((exp) => exp.month === month && !exp.isFromRule);
 
   // Calculate totals
   const totalCC = currentMonthCC.reduce((sum, ccm) => sum + ccm.amountPesos, 0);
@@ -63,7 +64,8 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
   const totalDebt = currentMonthDebt.reduce((sum, dm) => sum + dm.subpayments.reduce((s, sp) => s + sp.amountARS, 0), 0);
   const totalSvc = currentMonthSvc.reduce((sum, svc) => sum + svc.amountPesos, 0);
   const totalExp = currentMonthExp.reduce((sum, exp) => sum + exp.amountPesos, 0);
-  const grandTotal = totalCC + totalInv + totalDebt + totalSvc + totalExp;
+  // Monthly summary: credit cards + manual expenses + debts (mortgage)
+  const grandTotal = totalCC + totalExp + totalDebt;
 
   const totalInDollars = latestRate ? grandTotal / latestRate.realValue : 0;
 
@@ -113,7 +115,7 @@ export default function DashboardPage({ data, month }: DashboardPageProps) {
         </div>
 
         <div className="stat-card">
-          <div className="stat-card-label">Expenses</div>
+          <div className="stat-card-label">Manual Expenses</div>
           <div className="stat-card-value">${totalExp.toLocaleString('en-US', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,

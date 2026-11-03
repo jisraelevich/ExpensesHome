@@ -34,6 +34,11 @@ export default function BackupManager({ onClose }: BackupManagerProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!window.confirm('⚠️ Import this file? Current data will be replaced (a safety copy is kept in the backups list).')) {
+      e.target.value = '';
+      return;
+    }
+
     setIsLoading(true);
     try {
       const success = await DataService.importFromJSON(file);

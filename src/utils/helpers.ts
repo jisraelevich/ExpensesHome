@@ -111,6 +111,57 @@ export function getNextMonth(month: string): string {
 }
 
 /**
+ * Calculate number of months between two dates (monthly payments)
+ * Returns the number of full months from startDate to endDate (inclusive)
+ */
+export function calculatePaymentMonths(startDate: string, endDate: string): number {
+  try {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    let months = 0;
+    let current = new Date(start);
+    
+    while (current <= end) {
+      months++;
+      current.setMonth(current.getMonth() + 1);
+    }
+    
+    return Math.max(1, months); // At least 1 month
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * Calculate current payment number from startDate to today (monthly)
+ * Returns which payment number we're on (1-based)
+ */
+export function calculateCurrentPaymentNumber(startDate: string): number {
+  try {
+    const start = new Date(startDate);
+    const today = new Date();
+    
+    // Ensure we're comparing dates at midnight
+    start.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    
+    let paymentNumber = 1;
+    let current = new Date(start);
+    current.setHours(0, 0, 0, 0);
+    
+    while (current < today) {
+      paymentNumber++;
+      current.setMonth(current.getMonth() + 1);
+    }
+    
+    return paymentNumber;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * Convert Pesos to Dollars
  */
 export function pesosToDollars(pesos: number, rate: number): number {

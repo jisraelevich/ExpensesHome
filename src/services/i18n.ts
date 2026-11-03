@@ -12,7 +12,7 @@ interface Translations {
 
 const EN: Translations = {
   app: {
-    title: 'Expense Home',
+    title: 'Monthly Expenses',
     subtitle: 'Monthly Finance Manager',
   },
   nav: {

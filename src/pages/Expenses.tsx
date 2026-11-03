@@ -49,6 +49,15 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
             updatedAt: new Date().toISOString(),
           };
           await addItem(newExpense);
+        } else {
+          // UPDATE existing expense if amounts have changed
+          if (existingExpense.amountPesos !== cc.amountPesos || existingExpense.amountDollars !== cc.amountDollars) {
+            await updateItem(existingExpense.id, {
+              amountPesos: cc.amountPesos,
+              amountDollars: cc.amountDollars,
+              updatedAt: new Date().toISOString(),
+            });
+          }
         }
       }
       
@@ -83,7 +92,54 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
               updatedAt: new Date().toISOString(),
             };
             await addItem(newExpense);
+          } else {
+            // UPDATE existing expense if amounts have changed
+            if (existingExpense.amountPesos !== totalAmount || existingExpense.amountDollars !== totalUSD) {
+              await updateItem(existingExpense.id, {
+                amountPesos: totalAmount,
+                amountDollars: totalUSD,
+                updatedAt: new Date().toISOString(),
+              });
+            }
           }
+        }
+      }
+      
+      // Auto-copy expenses from previous month if they don't exist
+      const [year, monthNum] = month.split('-').map(Number);
+      let prevYear = year;
+      let prevMonthNum = monthNum - 1;
+      if (prevMonthNum === 0) {
+        prevMonthNum = 12;
+        prevYear = year - 1;
+      }
+      const prevMonth = `${prevYear}-${String(prevMonthNum).padStart(2, '0')}`;
+      
+      const prevMonthExpenses = items.filter(exp => exp.month === prevMonth && !exp.isFromRule && exp.status !== 'done');
+      
+      for (const prevExp of prevMonthExpenses) {
+        const existingInCurrentMonth = items.find(
+          exp => exp.month === month && 
+                  exp.description === prevExp.description && 
+                  !exp.isFromRule
+        );
+        
+        if (!existingInCurrentMonth) {
+          const newExpense: Expense = {
+            id: generateId(),
+            description: prevExp.description,
+            amountPesos: prevExp.amountPesos,
+            amountDollars: prevExp.amountDollars,
+            category: prevExp.category,
+            status: 'later',
+            fromCreditCard: false,
+            month,
+            isFromRule: false,
+            notes: prevExp.notes ? `${prevExp.notes} (copied from ${prevMonth})` : `Copied from ${prevMonth}`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          await addItem(newExpense);
         }
       }
     };
@@ -192,15 +248,51 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
   };
 
   const totalPesos = currentMonth.reduce((sum, exp) => sum + exp.amountPesos, 0);
-  const totalDollars = currentMonth.reduce((sum, exp) => sum + exp.amountDollars, 0);
 
   // Calculate totals by status
-  const laterPesos = currentMonth.filter(exp => exp.status === 'later').reduce((sum, exp) => sum + exp.amountPesos, 0);
-  const laterDollars = currentMonth.filter(exp => exp.status === 'later').reduce((sum, exp) => sum + exp.amountDollars, 0);
-  const nowPesos = currentMonth.filter(exp => exp.status === 'now').reduce((sum, exp) => sum + exp.amountPesos, 0);
-  const nowDollars = currentMonth.filter(exp => exp.status === 'now').reduce((sum, exp) => sum + exp.amountDollars, 0);
-  const donePesos = currentMonth.filter(exp => exp.status === 'done').reduce((sum, exp) => sum + exp.amountPesos, 0);
-  const doneDollars = currentMonth.filter(exp => exp.status === 'done').reduce((sum, exp) => sum + exp.amountDollars, 0);
+  // DONE: use saved rate per expense, LATER/NOW: use current rate
+  const doneExpenses = currentMonth.filter(exp => exp.status === 'done');
+  const donePesos = doneExpenses.reduce((sum, exp) => sum + exp.amountPesos, 0);
+  const doneUSD = doneExpenses.reduce((sum, exp) => {
+    const rate = (exp as any).dollarRateSavedWhenDone || latestRate;
+    return sum + (exp.amountPesos / rate);
+  }, 0);
+
+  const laterExpenses = currentMonth.filter(exp => exp.status === 'later');
+  const laterPesos = laterExpenses.reduce((sum, exp) => sum + exp.amountPesos, 0);
+  const laterUSD = laterPesos / latestRate;
+
+  const nowExpenses = currentMonth.filter(exp => exp.status === 'now');
+  const nowPesos = nowExpenses.reduce((sum, exp) => sum + exp.amountPesos, 0);
+  const nowUSD = nowPesos / latestRate;
+
+  // Calculate totals by category - respecting saved rates for DONE
+  const categoryTotals = allCategories.map(category => {
+    const isRuleCategory = groupedRuleExpenses[category];
+    const expenses = isRuleCategory ? groupedRuleExpenses[category] : groupedManualExpenses[category];
+    
+    const categoryPesos = expenses.reduce((sum, exp) => sum + exp.amountPesos, 0);
+    
+    // For DONE expenses: use saved rate, for others: use current rate
+    const categoryUSD = expenses.reduce((sum, exp) => {
+      if (exp.status === 'done') {
+        const rate = (exp as any).dollarRateSavedWhenDone || latestRate;
+        return sum + (exp.amountPesos / rate);
+      } else {
+        return sum + (exp.amountPesos / latestRate);
+      }
+    }, 0);
+    
+    return {
+      category,
+      categoryPesos,
+      categoryUSD,
+      isRule: !!isRuleCategory,
+    };
+  });
+
+  // Convert total ARS to USD: sum of all statuses with their respective rates
+  const totalUSD = doneUSD + laterUSD + nowUSD;
 
   return (
     <div className="page">
@@ -238,50 +330,96 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
         </div>
       ) : (
         <>
-          {/* Summary - 4 sections: ALL, Later, Now, Done */}
+          {/* Rate Info */}
+          <div className="card" style={{ backgroundColor: '#f0f8ff', borderLeft: '4px solid #0084ff', padding: '12px' }}>
+            <p style={{ margin: 0, fontSize: '12px', color: '#0084ff', fontWeight: 500 }}>
+              💱 <strong>ACTIVE EXCHANGE RATE:</strong> 1 USD = <strong style={{ fontSize: '14px', color: '#0066cc' }}>${latestRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> ARS
+            </p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#0084ff' }}>
+              All ARS amounts are converted to USD using this rate in the summary below
+            </p>
+          </div>
+
+          {/* Category Totals - ARS only with USD equivalent */}
           <div className="card">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px', fontWeight: 600 }}>📊 Totals by Category</h3>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', 
+              gap: '12px',
+              maxHeight: '400px',
+              overflowY: 'auto'
+            }}>
+              {categoryTotals.filter(cat => cat.categoryPesos > 0).map((cat) => (
+                <div key={cat.category} style={{ 
+                  padding: '12px', 
+                  backgroundColor: cat.isRule ? '#fffacd' : '#f9f9f9', 
+                  borderRadius: '6px', 
+                  borderLeft: `4px solid ${cat.isRule ? '#ff9800' : '#999'}`,
+                  fontSize: '12px'
+                }}>
+                  <p style={{ margin: '0 0 8px 0', fontWeight: 600, fontSize: '13px' }}>
+                    {cat.category === 'Credit Card' && '💳'} {cat.category === 'Debts' && '💰'} {cat.category !== 'Credit Card' && cat.category !== 'Debts' && '📁'} {cat.category}
+                  </p>
+                  <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666' }}>
+                    ARS: ${cat.categoryPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: '#0066cc', backgroundColor: '#e8f4f8', padding: '6px', borderRadius: '3px' }}>
+                    = ${cat.categoryUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Summary - 4 sections: ALL, Later, Now, Done - ARS only with USD equivalent */}
+          <div className="card">
+            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px', fontWeight: 600 }}>📈 Summary by Status</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
               {/* ALL */}
               <div style={{ padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '6px', borderLeft: '4px solid #333' }}>
-                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>ALL</p>
-                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600 }}>
-                  ${totalPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#333', fontWeight: 600 }}>💼 ALL</p>
+                <p style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#666' }}>
+                  ARS: ${totalPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
-                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
-                  ${totalDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: '#333', backgroundColor: '#fff', padding: '6px', borderRadius: '3px' }}>
+                  = ${totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
                 </p>
               </div>
 
               {/* LATER */}
               <div style={{ padding: '12px', backgroundColor: '#f3f0ff', borderRadius: '6px', borderLeft: '4px solid #8b5cf6' }}>
-                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>📅 LATER</p>
-                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600, color: '#8b5cf6' }}>
-                  ${laterPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#8b5cf6', fontWeight: 600 }}>📅 LATER</p>
+                <p style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#666' }}>
+                  ARS: ${laterPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
-                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
-                  ${laterDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: '#8b5cf6', backgroundColor: '#f9f7ff', padding: '6px', borderRadius: '3px' }}>
+                  = ${laterUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
                 </p>
               </div>
 
               {/* NOW */}
               <div style={{ padding: '12px', backgroundColor: '#fffbf0', borderRadius: '6px', borderLeft: '4px solid #f59e0b' }}>
-                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>⏳ NOW</p>
-                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600, color: '#f59e0b' }}>
-                  ${nowPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>⏳ NOW</p>
+                <p style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#666' }}>
+                  ARS: ${nowPesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
-                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
-                  ${nowDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: '#f59e0b', backgroundColor: '#fffcf5', padding: '6px', borderRadius: '3px' }}>
+                  = ${nowUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
                 </p>
               </div>
 
               {/* DONE */}
               <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderRadius: '6px', borderLeft: '4px solid #10b981' }}>
-                <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#666', fontWeight: 500 }}>✅ DONE</p>
-                <p style={{ margin: '0 0 2px 0', fontSize: '16px', fontWeight: 600, color: '#10b981' }}>
-                  ${donePesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#10b981', fontWeight: 600 }}>✅ DONE</p>
+                <p style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#666' }}>
+                  ARS: ${donePesos.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
-                <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>
-                  ${doneDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: '#10b981', backgroundColor: '#f7fdf9', padding: '6px', borderRadius: '3px' }}>
+                  = ${doneUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                </p>
+                <p style={{ margin: '6px 0 0 0', fontSize: '10px', color: '#10b981', fontStyle: 'italic' }}>
+                  💾 Using saved rates at payment time
                 </p>
               </div>
             </div>
@@ -319,68 +457,78 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
                       </tr>
                       {/* Expenses under category */}
                       {expenses.map((exp) => (
-                        <tr key={exp.id} style={{ backgroundColor: exp.isFromRule ? '#f5f5f5' : 'transparent' }}>
-                          {exp.isFromRule ? (
-                            <>
-                              <td style={{ fontSize: '12px', fontWeight: '500', padding: '4px 2px' }}>
-                                {exp.description || '-'}
-                              </td>
-                              <td style={{ fontSize: '12px', fontFamily: 'monospace', textAlign: 'right', padding: '4px 2px' }}>
-                                ${exp.amountPesos.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td style={{ fontSize: '12px', fontFamily: 'monospace', textAlign: 'right', padding: '4px 2px' }}>
-                                ${exp.amountDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td style={{ fontSize: '12px', color: '#666', padding: '4px 2px' }}>
-                                {exp.category || '-'}
-                              </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <div className="status-button-group inline">
-                                  <button type="button" data-status="later" className={`${exp.status === 'later' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'later')}>📅</button>
-                                  <button type="button" data-status="now" className={`${exp.status === 'now' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'now')}>⏳</button>
-                                  <button type="button" data-status="done" className={`${exp.status === 'done' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'done')}>✅</button>
-                                </div>
-                              </td>
-                              <td style={{ textAlign: 'center', fontSize: '12px', color: '#999', padding: '4px 2px' }}>
-                                {exp.fromCreditCard ? '✓' : '-'}
-                              </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <span style={{ fontSize: '11px', color: '#999' }}>🔒</span>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td style={{ padding: '4px 2px' }}>
-                                <input type="text" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} placeholder="Description" value={exp.description} onChange={(e) => handleEditDescription(exp.id, e.target.value)} />
-                              </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <input type="number" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', textAlign: 'right', fontFamily: 'monospace', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} value={exp.amountPesos} onChange={(e) => handleEditAmountPesos(exp.id, parseFloat(e.target.value) || 0)} step="0.01" placeholder="0.00" />
-                              </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <input type="number" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', textAlign: 'right', fontFamily: 'monospace', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} value={exp.amountDollars} onChange={(e) => handleEditAmountDollars(exp.id, parseFloat(e.target.value) || 0)} step="0.01" placeholder="0.00" />
-                              </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <input type="text" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} placeholder="Category" value={exp.category || ''} onChange={(e) => handleEditCategory(exp.id, e.target.value)} />
-                              </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <div className="status-button-group inline">
-                                  <button type="button" data-status="later" className={`${exp.status === 'later' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'later')}>📅</button>
-                                  <button type="button" data-status="now" className={`${exp.status === 'now' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'now')}>⏳</button>
-                                  <button type="button" data-status="done" className={`${exp.status === 'done' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'done')}>✅</button>
-                                </div>
-                              </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <label style={{ cursor: 'pointer' }}>
-                                  <input type="checkbox" checked={exp.fromCreditCard} onChange={(e) => handleEditFromCreditCard(exp.id, e.target.checked)} />
+                        <React.Fragment key={exp.id}>
+                          <tr style={{ backgroundColor: exp.isFromRule ? '#f5f5f5' : 'transparent' }}>
+                            {exp.isFromRule ? (
+                              <>
+                                <td style={{ fontSize: '12px', fontWeight: '500', padding: '4px 2px' }}>
+                                  {exp.description || '-'}
+                                </td>
+                                <td style={{ fontSize: '12px', fontFamily: 'monospace', textAlign: 'right', padding: '4px 2px' }}>
+                                  ${exp.amountPesos.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ fontSize: '12px', fontFamily: 'monospace', textAlign: 'right', padding: '4px 2px' }}>
+                                  ${exp.amountDollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ fontSize: '12px', color: '#666', padding: '4px 2px' }}>
+                                  {exp.category || '-'}
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <div className="status-button-group inline">
+                                    <button type="button" data-status="later" className={`${exp.status === 'later' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'later')}>📅</button>
+                                    <button type="button" data-status="now" className={`${exp.status === 'now' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'now')}>⏳</button>
+                                    <button type="button" data-status="done" className={`${exp.status === 'done' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'done')}>✅</button>
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: 'center', fontSize: '12px', color: '#999', padding: '4px 2px' }}>
                                   {exp.fromCreditCard ? '✓' : '-'}
-                                </label>
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <span style={{ fontSize: '11px', color: '#999' }}>🔒</span>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <input type="text" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} placeholder="Description" value={exp.description} onChange={(e) => handleEditDescription(exp.id, e.target.value)} />
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <input type="number" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', textAlign: 'right', fontFamily: 'monospace', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} value={exp.amountPesos} onChange={(e) => handleEditAmountPesos(exp.id, parseFloat(e.target.value) || 0)} step="0.01" placeholder="0.00" />
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <input type="number" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', textAlign: 'right', fontFamily: 'monospace', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} value={exp.amountDollars} onChange={(e) => handleEditAmountDollars(exp.id, parseFloat(e.target.value) || 0)} step="0.01" placeholder="0.00" />
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <input type="text" style={{ width: '100%', padding: '2px 3px', minHeight: '22px', fontSize: '12px', lineHeight: '1', border: '1px solid #ccc', borderRadius: '3px', backgroundColor: '#fff' }} placeholder="Category" value={exp.category || ''} onChange={(e) => handleEditCategory(exp.id, e.target.value)} />
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <div className="status-button-group inline">
+                                    <button type="button" data-status="later" className={`${exp.status === 'later' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'later')}>📅</button>
+                                    <button type="button" data-status="now" className={`${exp.status === 'now' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'now')}>⏳</button>
+                                    <button type="button" data-status="done" className={`${exp.status === 'done' ? 'active' : ''}`} onClick={() => handleEditStatus(exp.id, 'done')}>✅</button>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <label style={{ cursor: 'pointer' }}>
+                                    <input type="checkbox" checked={exp.fromCreditCard} onChange={(e) => handleEditFromCreditCard(exp.id, e.target.checked)} />
+                                    {exp.fromCreditCard ? '✓' : '-'}
+                                  </label>
+                                </td>
+                                <td style={{ padding: '4px 2px' }}>
+                                  <button className="button button-small" onClick={() => { setSelectedExpense(exp); setShowForm(true); }}>✏️</button>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                          {/* Show saved rate info for DONE expenses */}
+                          {exp.status === 'done' && (exp as any).dollarRateSavedWhenDone && (
+                            <tr style={{ backgroundColor: '#f0fdf4' }}>
+                              <td colSpan={7} style={{ padding: '4px 8px', fontSize: '11px', color: '#10b981', fontStyle: 'italic' }}>
+                                💾 <strong>Saved Rate:</strong> 1 USD = ${(exp as any).dollarRateSavedWhenDone.toLocaleString('en-US', { minimumFractionDigits: 2 })} ARS (Equivalent: ${(exp.amountPesos / (exp as any).dollarRateSavedWhenDone).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD)
                               </td>
-                              <td style={{ padding: '4px 2px' }}>
-                                <button className="button button-small" onClick={() => { setSelectedExpense(exp); setShowForm(true); }}>✏️</button>
-                              </td>
-                            </>
+                            </tr>
                           )}
-                        </tr>
+                        </React.Fragment>
                       ))}
                     </React.Fragment>
                   );

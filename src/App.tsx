@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAppData, useCurrentMonth, useAuth } from './hooks';
 import { getPreviousMonth, getNextMonth } from './utils/helpers';
+import { AuthService } from './services/AuthService';
+import { IS_DEV } from './services/env';
 import './styles/global.css';
 import './App.css';
 
@@ -57,7 +59,7 @@ function App() {
       {/* Header */}
       <header className="app-header">
         <div className="header-content">
-          <h1>💰 Expense Home</h1>
+          <h1>💰 Monthly Expenses</h1>
           <div className="header-right">
             <div className="month-navigation">
               <button 
@@ -100,6 +102,26 @@ function App() {
                   <div className="user-name">{user.name}</div>
                   <div className="user-email">{user.email}</div>
                 </div>
+              )}
+              {IS_DEV ? (
+                <span
+                  title="Development mode: no login, data stays in this browser"
+                  style={{ background: '#f59e0b', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}
+                >
+                  DEV
+                </span>
+              ) : (
+                <button
+                  className="nav-tab"
+                  title="Sign out"
+                  onClick={() => {
+                    AuthService.logout();
+                    window.location.reload();
+                  }}
+                >
+                  <span className="tab-icon">🚪</span>
+                  <span className="tab-label">Sign out</span>
+                </button>
               )}
               <button 
                 className={`nav-tab ${currentTab === 'admin' ? 'active' : ''}`}

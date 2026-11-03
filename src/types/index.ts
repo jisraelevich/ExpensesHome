@@ -155,6 +155,8 @@ export interface Expense {
   category?: string; // Optional categorization
   notes?: string;
   isFromRule?: boolean; // true if auto-generated from a rule (read-only except status)
+  dollarRateAtDone?: number; // Exchange rate (ARS/USD) when marked as done - for historical reports
+  doneDate?: string; // 'YYYY-MM-DD' - Date when marked as done
   createdAt: string;
   updatedAt: string;
 }

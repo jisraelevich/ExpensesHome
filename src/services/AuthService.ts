@@ -3,6 +3,7 @@ import { generateId, getCurrentDate } from '../utils/helpers';
 
 const AUTH_STORAGE_KEY = 'expenses_auth_user';
 const AUTH_PROVIDER_KEY = 'expenses_auth_provider';
+const GOOGLE_TOKEN_KEY = 'expenses_auth_google_token';
 
 export class AuthService {
   /**
@@ -59,11 +60,54 @@ export class AuthService {
   }
 
   /**
+   * Store a Google ID token (production login) and the user it describes.
+   * The token is only decoded here for display; the server verifies it on every API call.
+   */
+  static setGoogleSession(idToken: string): User | null {
+    try {
+      const payload = JSON.parse(
+        new TextDecoder().decode(
+          Uint8Array.from(atob(idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))
+        )
+      );
+      if (!payload.email || !payload.exp) return null;
+
+      const user = this.setGoogleUser({
+        id: payload.sub,
+        email: payload.email,
+        name: payload.name || payload.email,
+        photoUrl: payload.picture,
+      });
+      localStorage.setItem(GOOGLE_TOKEN_KEY, JSON.stringify({ idToken, exp: payload.exp }));
+      return user;
+    } catch (error) {
+      console.error('Error reading Google token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get the Google ID token if it is still valid (1 minute safety margin)
+   */
+  static getIdToken(): string | null {
+    try {
+      const stored = localStorage.getItem(GOOGLE_TOKEN_KEY);
+      if (!stored) return null;
+      const { idToken, exp } = JSON.parse(stored);
+      if (!idToken || typeof exp !== 'number') return null;
+      return Date.now() / 1000 < exp - 60 ? idToken : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Logout (clear user)
    */
   static logout(): void {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_PROVIDER_KEY);
+    localStorage.removeItem(GOOGLE_TOKEN_KEY);
   }
 
   /**

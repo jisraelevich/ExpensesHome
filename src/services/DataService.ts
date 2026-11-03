@@ -10,6 +10,7 @@ import {
   Expense,
   AppConfig,
 } from '../types';
+import { RemoteSync } from './RemoteSync';
 
 /**
  * DataService - Manages all JSON operations
@@ -128,6 +129,9 @@ class DataService {
 
       // Now save the new data
       localStorage.setItem(STORAGE_KEY_PREFIX + 'all', JSON.stringify(data));
+
+      // Production only: push to the shared server copy (no-op in development)
+      RemoteSync.schedulePush();
 
       console.log('✅ Data saved successfully');
     } catch (error) {
@@ -341,7 +345,44 @@ class DataService {
   }
 
   /**
-   * Calculate payment number for a given month
+   * Calculate payment number based on startDate and today's date
+   * Uses actual date fields (YYYY-MM-DD format)
+   * Example: startDate: 2026-01-15, today: 2026-10-05 → Payment 10
+   */
+  public static calculatePaymentNumberFromDate(startDate: string, targetDate: string = new Date().toISOString().split('T')[0]): number {
+    const [startYear, startMonth] = startDate.split('-').map(Number);
+    const [targetYear, targetMonth] = targetDate.split('-').map(Number);
+    
+    // Create dates with day 1 to avoid month boundary issues
+    const start = new Date(startYear, startMonth - 1, 1);
+    const target = new Date(targetYear, targetMonth - 1, 1);
+    
+    const monthsDiff = (target.getFullYear() - start.getFullYear()) * 12 +
+                       (target.getMonth() - start.getMonth());
+    
+    return Math.max(1, monthsDiff + 1); // Payment 1 starts in the startDate month
+  }
+
+  /**
+   * Calculate total number of payments from startDate to endDate
+   * Returns the number of months between the two dates (inclusive)
+   * Example: startDate: 2026-01-15, endDate: 2026-12-31 → 12 payments
+   */
+  public static calculateTotalPaymentsFromDates(startDate: string, endDate: string): number {
+    const [startYear, startMonth] = startDate.split('-').map(Number);
+    const [endYear, endMonth] = endDate.split('-').map(Number);
+    
+    const start = new Date(startYear, startMonth - 1, 1);
+    const end = new Date(endYear, endMonth - 1, 1);
+    
+    const monthsDiff = (end.getFullYear() - start.getFullYear()) * 12 +
+                       (end.getMonth() - start.getMonth());
+    
+    return Math.max(1, monthsDiff + 1); // Include both start and end month
+  }
+
+  /**
+   * Calculate payment number for a given month (legacy, uses startMonth)
    */
   public static calculatePaymentNumber(startMonth: string, targetMonth: string): number {
     const [startYear, startMonthNum] = startMonth.split('-').map(Number);
@@ -462,7 +503,12 @@ class DataService {
             return;
           }
 
-          // Save imported data (no automatic backup)
+          // Keep a safety copy of the current data before replacing it
+          const current = localStorage.getItem(STORAGE_KEY_PREFIX + 'all');
+          if (current) {
+            localStorage.setItem(`${STORAGE_KEY_PREFIX}backup_${new Date().toISOString()}_preimport`, current);
+          }
+
           await this.saveAllData(jsonData);
           resolve(true);
         } catch (error) {
@@ -544,21 +590,34 @@ class DataService {
   }
 
   /**
-   * Create on-demand backup (always creates, bypasses daily limit)
+   * Create on-demand backup (limited to one per day, same as auto-backup)
    */
   public static async createManualBackup(): Promise<string> {
     try {
+      // Check if backup already created today
+      if (!this.shouldCreateAutoBackup()) {
+        const existingBackups = this.getBackupsList();
+        const todayBackup = existingBackups.find(b => b.timestamp.startsWith(this.getTodayDate()));
+        if (todayBackup) {
+          console.log(`⏭️ Backup already created today (${this.getTodayDate()}) - SKIPPING`);
+          return todayBackup.key;
+        }
+      }
+
       const data = await this.loadAllData();
-      const timestamp = new Date().toISOString();
-      const backupKey = `${STORAGE_KEY_PREFIX}backup_${timestamp}`;
+      // Use timestamp with milliseconds + random suffix to ensure uniqueness
+      const now = new Date();
+      const isoString = now.toISOString();
+      const randomSuffix = Math.random().toString(36).substring(2, 6);
+      const backupKey = `${STORAGE_KEY_PREFIX}backup_${isoString}_${randomSuffix}`;
       
       localStorage.setItem(backupKey, JSON.stringify(data));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}last_backup_date`, this.getTodayDate());
       
-      // Keep last 100 backups
+      // Keep last 100 backups and remove duplicates from the same day
       this.cleanOldBackups(100);
       
-      console.log(`💾 Manual backup created: ${timestamp}`);
+      console.log(`💾 Manual backup created: ${isoString}`);
       return backupKey;
     } catch (error) {
       console.error('❌ Error creating manual backup:', error);
@@ -573,7 +632,8 @@ class DataService {
     const allKeys = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith(`${STORAGE_KEY_PREFIX}backup_`)) {
+      // Pre-import safety copies are never auto-deleted
+      if (key?.startsWith(`${STORAGE_KEY_PREFIX}backup_`) && !key.endsWith('_preimport')) {
         allKeys.push(key);
       }
     }

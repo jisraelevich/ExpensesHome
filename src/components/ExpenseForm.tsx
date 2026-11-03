@@ -24,12 +24,11 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
     }
   );
 
-  // Auto-calculate dollars from pesos if not entered
+  // Handle pesos change WITHOUT auto-calculating dollars
   const handlePesosChange = (pesos: number) => {
     setFormData({
       ...formData,
       amountPesos: pesos,
-      amountDollars: dollarRate > 0 ? pesos / dollarRate : 0,
     });
   };
 
@@ -50,8 +49,12 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
         creditCardId: formData.creditCardId,
         category: formData.category,
         notes: formData.notes,
+        isFromRule: formData.isFromRule || false,
         createdAt: initialData?.createdAt || now,
         updatedAt: now,
+        // If changing to 'done', capture the current exchange rate and date
+        dollarRateAtDone: formData.status === 'done' ? dollarRate : initialData?.dollarRateAtDone,
+        doneDate: formData.status === 'done' ? now : initialData?.doneDate,
       };
 
       await onSave(expense);
@@ -101,7 +104,7 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
             onFocus={(e) => e.target.select()}
             placeholder="0.00"
           />
-          <small style={{ color: '#999' }}>Auto-calculated from pesos at ${dollarRate.toFixed(2)}</small>
+          <small style={{ color: '#999' }}>Optional - Enter manually if there's a dollar expense</small>
         </div>
 
         <div className="form-group">
@@ -147,6 +150,18 @@ export default function ExpenseForm({ month, dollarRate, onSave, onCancel, initi
           <small style={{ color: '#999' }}>
             📅 Later = future payment • ⏳ Now = pay today • ✅ Done = already paid
           </small>
+          {formData.status === 'done' && (
+            <div style={{ 
+              marginTop: '8px', 
+              padding: '8px', 
+              backgroundColor: '#e8f5e9', 
+              borderRadius: '4px',
+              fontSize: '12px',
+              color: '#2e7d32'
+            }}>
+              💾 Rate saved when done: <strong>${dollarRate.toFixed(2)}</strong> ARS/USD
+            </div>
+          )}
         </div>
 
         <div className="form-group">

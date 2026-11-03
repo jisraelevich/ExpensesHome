@@ -1,4 +1,4 @@
-# Expenses 2026 - Personal Finance Manager
+# Monthly Expenses - Personal Finance Manager
 
 A modern, responsive expense management app for tracking monthly finances with support for multiple currencies (ARS/USD), credit cards, investments, services, debts, and more.
 

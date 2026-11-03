@@ -619,7 +619,7 @@ export default function AdminPage() {
         <h3>ℹ️ App Information</h3>
         <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
           <p>
-            <strong>App:</strong> Expense Home - Monthly Finance Manager
+            <strong>App:</strong> Monthly Expenses
           </p>
           <p>
             <strong>Version:</strong> 1.0.0
