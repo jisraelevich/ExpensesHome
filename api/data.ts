@@ -1,18 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { OAuth2Client } from 'google-auth-library';
-import { list, put } from '@vercel/blob';
+import { del, list, put } from '@vercel/blob';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 /**
  * Shared data endpoint (production only).
  *
  *   GET /api/data  -> { version, data, updatedAt, updatedBy }   (data is null when nothing is saved yet)
+ *   GET /api/data?since=N -> { version, unchanged: true } when the server is still at version N (cheap polling)
  *   PUT /api/data  -> body { baseVersion, data }; 409 if baseVersion is not the current version
  *
  * Every request needs "Authorization: Bearer <Google ID token>".
  * Only emails listed in ADMIN_EMAILS (comma separated) are allowed; all of them are full editors.
  *
  * The JSON document is stored encrypted (AES-256-GCM) in Vercel Blob, so the blob URL alone is useless.
+ * Every save is a NEW immutable file (expenses/versions/v000000013.enc) that is never overwritten:
+ * creating a file that already exists fails, which makes "two saves of the same version" impossible
+ * and avoids reading stale CDN copies of an overwritten file.
  *
  * Environment variables:
  *   GOOGLE_CLIENT_ID      Google OAuth client id (same value as VITE_GOOGLE_CLIENT_ID)
@@ -21,9 +25,19 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
  *   BLOB_READ_WRITE_TOKEN added automatically when a Blob store is connected to the project
  */
 
-const DATA_PATH = 'expenses/data.json.enc';
+const LEGACY_PATH = 'expenses/data.json.enc'; // single overwritten file used by the first release
+const VERSIONS_PREFIX = 'expenses/versions/';
 const BACKUP_PREFIX = 'expenses/backups/';
+const KEEP_VERSIONS = 40;
 const MAX_BYTES = 4 * 1024 * 1024;
+
+interface VersionFile {
+  version: number;
+  url: string;
+  pathname: string;
+}
+
+const versionPath = (version: number) => `${VERSIONS_PREFIX}v${String(version).padStart(9, '0')}.enc`;
 
 interface StoredDoc {
   version: number;
@@ -85,22 +99,81 @@ async function authenticate(req: VercelRequest): Promise<AuthResult> {
   return { email };
 }
 
-async function readDoc(): Promise<StoredDoc | null> {
-  const { blobs } = await list({ prefix: DATA_PATH, limit: 1 });
-  if (blobs.length === 0) return null;
-  // Query string bypasses the CDN cache so we always read the latest version
-  const res = await fetch(`${blobs[0].url}?t=${Date.now()}`, { cache: 'no-store' });
+async function listVersions(): Promise<VersionFile[]> {
+  const found: VersionFile[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix: VERSIONS_PREFIX, cursor, limit: 1000 });
+    for (const blob of page.blobs) {
+      const match = blob.pathname.match(/v(\d{9})\.enc$/);
+      if (match) found.push({ version: Number(match[1]), url: blob.url, pathname: blob.pathname });
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  return found.sort((a, b) => a.version - b.version);
+}
+
+async function fetchDoc(url: string): Promise<StoredDoc> {
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Could not read data (${res.status})`);
   return JSON.parse(decrypt(await res.text())) as StoredDoc;
 }
 
-async function writeDoc(doc: StoredDoc): Promise<void> {
-  await put(DATA_PATH, encrypt(JSON.stringify(doc)), {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: 'text/plain',
-  });
+interface Latest {
+  version: number;
+  doc: StoredDoc | null; // null when nothing is stored yet, or when the caller already has this version
+  unchanged: boolean;
+  versions: VersionFile[];
+}
+
+/**
+ * Finds the latest version by listing the version files (never a cached copy).
+ * Version files are immutable, so reading one by URL is always safe.
+ */
+async function readLatest(sinceVersion?: number): Promise<Latest> {
+  const versions = await listVersions();
+  if (versions.length > 0) {
+    const latest = versions[versions.length - 1];
+    if (sinceVersion === latest.version) {
+      return { version: latest.version, doc: null, unchanged: true, versions };
+    }
+    return { version: latest.version, doc: await fetchDoc(latest.url), unchanged: false, versions };
+  }
+
+  // Data saved by the first release (one overwritten file): used until the first new-style save
+  const { blobs } = await list({ prefix: LEGACY_PATH, limit: 1 });
+  if (blobs.length === 0) return { version: 0, doc: null, unchanged: false, versions };
+  const doc = await fetchDoc(`${blobs[0].url}?t=${Date.now()}`);
+  return { version: doc.version, doc, unchanged: sinceVersion === doc.version, versions };
+}
+
+/**
+ * Creates the file for doc.version. Returns false when that version already exists
+ * (somebody else saved first), which the caller reports as a conflict.
+ */
+async function writeVersion(doc: StoredDoc): Promise<boolean> {
+  try {
+    await put(versionPath(doc.version), encrypt(JSON.stringify(doc)), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: 'text/plain',
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof Error && /already exists/i.test(error.message)) return false;
+    throw error;
+  }
+}
+
+/** Keeps only the most recent versions. Failures are ignored (it is only housekeeping). */
+async function pruneVersions(versions: VersionFile[]): Promise<void> {
+  if (versions.length <= KEEP_VERSIONS) return;
+  try {
+    await del(versions.slice(0, versions.length - KEEP_VERSIONS).map((v) => v.url));
+  } catch (error) {
+    console.error('api/data prune error:', error);
+  }
 }
 
 /**
@@ -144,12 +217,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET') {
-      const doc = await readDoc();
+      const sinceParam = Array.isArray(req.query.since) ? req.query.since[0] : req.query.since;
+      const since = sinceParam !== undefined && sinceParam !== '' ? Number(sinceParam) : undefined;
+      const latest = await readLatest(Number.isFinite(since) ? since : undefined);
+      if (latest.unchanged) {
+        return res.status(200).json({ version: latest.version, unchanged: true, data: null });
+      }
       return res.status(200).json({
-        version: doc?.version ?? 0,
-        data: doc?.data ?? null,
-        updatedAt: doc?.updatedAt,
-        updatedBy: doc?.updatedBy,
+        version: latest.version,
+        data: latest.doc?.data ?? null,
+        updatedAt: latest.doc?.updatedAt,
+        updatedBy: latest.doc?.updatedBy,
       });
     }
 
@@ -162,21 +240,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(413).json({ error: 'Data too large' });
       }
 
-      const existing = await readDoc();
-      const currentVersion = existing?.version ?? 0;
-      if (baseVersion !== currentVersion) {
-        return res.status(409).json({ error: 'Version conflict', version: currentVersion });
+      const latest = await readLatest();
+      if (baseVersion !== latest.version) {
+        return res.status(409).json({ error: 'Version conflict', version: latest.version });
       }
 
-      if (existing) await backupBeforeOverwrite(existing);
+      if (latest.doc) await backupBeforeOverwrite(latest.doc);
 
       const next: StoredDoc = {
-        version: currentVersion + 1,
+        version: latest.version + 1,
         updatedAt: new Date().toISOString(),
         updatedBy: auth.email,
         data,
       };
-      await writeDoc(next);
+      if (!(await writeVersion(next))) {
+        // Another save created this version between our read and our write
+        return res.status(409).json({ error: 'Version conflict', version: next.version });
+      }
+      await pruneVersions(latest.versions);
       return res.status(200).json({ version: next.version });
     }
 

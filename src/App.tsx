@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppData, useCurrentMonth, useAuth } from './hooks';
 import { getPreviousMonth, getNextMonth } from './utils/helpers';
+import { REMOTE_UPDATED_EVENT } from './services/RemoteSync';
 import { AuthService } from './services/AuthService';
 import { IS_DEV } from './services/env';
 import './styles/global.css';
@@ -23,6 +24,17 @@ function App() {
   const { user } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  // Bumped when other users' changes arrive, so every page reloads its data from the merged copy
+  const [syncTick, setSyncTick] = useState(0);
+
+  useEffect(() => {
+    const onRemoteUpdated = () => {
+      void refreshData();
+      setSyncTick((tick) => tick + 1);
+    };
+    window.addEventListener(REMOTE_UPDATED_EVENT, onRemoteUpdated);
+    return () => window.removeEventListener(REMOTE_UPDATED_EVENT, onRemoteUpdated);
+  }, [refreshData]);
 
   // Set selectedMonth to currentMonth once it's loaded
   useEffect(() => {
@@ -154,7 +166,7 @@ function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="app-main">
+      <main className="app-main" key={syncTick}>
         {currentTab === 'dashboard' && <DashboardPage data={data} month={selectedMonth} />}
         {currentTab === 'creditCards' && <CreditCardsPage month={selectedMonth} onRefresh={refreshData} />}
         {currentTab === 'investments' && <InvestmentsPage month={selectedMonth} onRefresh={refreshData} />}

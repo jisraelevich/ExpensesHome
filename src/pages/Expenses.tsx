@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTable, useAppData } from '../hooks';
 import { Expense, CreditCardMonthly, DebtMonthly, Debt } from '../types';
 import ExpenseForm from '../components/ExpenseForm';
-import { parseMoneyInput, formatMoneyInput, generateId } from '../utils/helpers';
+import { parseMoneyInput, formatMoneyInput } from '../utils/helpers';
 
 interface ExpensesPageProps {
   month: string;
@@ -34,8 +34,11 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
         const existingExpense = items.find(exp => exp.description === ccCard.bankName && exp.month === month && exp.isFromRule);
         
         if (!existingExpense) {
+          // Stable id: every browser generates the same record for the same card + month
+          const newId = `rule-cc-${cc.creditCardId}-${month}`;
+          if (items.some((exp) => exp.id === newId)) continue;
           const newExpense: Expense = {
-            id: generateId(),
+            id: newId,
             description: ccCard.bankName,
             amountPesos: cc.amountPesos,
             amountDollars: cc.amountDollars,
@@ -77,8 +80,10 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
           const existingExpense = items.find(exp => exp.description === debt.name && exp.month === month && exp.isFromRule);
           
           if (!existingExpense) {
+            const newId = `rule-debt-${debt.id}-${month}`;
+            if (items.some((exp) => exp.id === newId)) continue;
             const newExpense: Expense = {
-              id: generateId(),
+              id: newId,
               description: debt.name,
               amountPesos: totalAmount,
               amountDollars: totalUSD,
@@ -125,8 +130,10 @@ export default function ExpensesPage({ month, onRefresh }: ExpensesPageProps) {
         );
         
         if (!existingInCurrentMonth) {
+          const newId = `copy-${prevExp.id}-${month}`;
+          if (items.some((exp) => exp.id === newId)) continue;
           const newExpense: Expense = {
-            id: generateId(),
+            id: newId,
             description: prevExp.description,
             amountPesos: prevExp.amountPesos,
             amountDollars: prevExp.amountDollars,

@@ -190,9 +190,17 @@ class DataService {
   ): Promise<T> {
     const data = await this.loadAllData();
     const table = data[tableName] as T[];
-    table.push(item);
+    // updatedAt lets the shared-data merge decide which change is newer
+    const stamped = { ...item, updatedAt: new Date().toISOString() } as T;
+    const existingIndex = table.findIndex((row) => row.id === item.id);
+    if (existingIndex === -1) {
+      table.push(stamped);
+    } else {
+      // Same id already exists (e.g. auto-generated records): replace instead of duplicating
+      table[existingIndex] = stamped;
+    }
     await this.saveAllData(data);
-    return item;
+    return stamped;
   }
 
   /**
@@ -209,7 +217,7 @@ class DataService {
 
     if (index === -1) return null;
 
-    table[index] = { ...table[index], ...updates };
+    table[index] = { ...table[index], ...updates, updatedAt: new Date().toISOString() };
     await this.saveAllData(data);
     return table[index];
   }

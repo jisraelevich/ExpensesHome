@@ -1,26 +1,35 @@
 import { AuthService } from './AuthService';
 import { IS_DEV } from './env';
+import { mergeData, sameValue } from './merge';
 
 /**
  * RemoteSync - keeps the shared JSON document on the server in sync with localStorage.
  * Only active in production (IS_DEV === false). In dev everything stays in localStorage.
  *
  * - localStorage remains the working copy (fast, works offline for a moment).
- * - Every save is pushed (debounced) to /api/data with the version it was based on.
- * - If the server version is newer (someone else saved), the push is rejected (409)
- *   and the latest server data is loaded instead.
+ * - Every save is pushed (debounced) to /api/data with the server version it was based on.
+ * - If somebody else saved first (409), the latest server data is merged with the local changes
+ *   record by record (see merge.ts) and the push is retried. Nothing is discarded and nobody is asked.
+ * - Other people's changes are picked up when the tab gets focus and every few minutes,
+ *   and the UI is refreshed through REMOTE_UPDATED_EVENT (no page reload).
  */
 
 const DATA_KEY = 'expenses_2026_all';
 const VERSION_KEY = 'expenses_2026_server_version';
 const DIRTY_KEY = 'expenses_2026_sync_dirty';
+const BASE_KEY = 'expenses_2026_sync_base';
 const API_URL = '/api/data';
 const PUSH_DELAY_MS = 800;
 const FOCUS_CHECK_MIN_INTERVAL_MS = 15000;
+const POLL_INTERVAL_MS = 120000;
+const MAX_SYNC_ATTEMPTS = 5;
+
+export const REMOTE_UPDATED_EVENT = 'expenses:remote-updated';
 
 interface RemoteDoc {
   version: number;
   data: any | null;
+  unchanged?: boolean;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -46,7 +55,7 @@ export class RemoteSync {
 
   private static timer: number | undefined;
   private static pushing = false;
-  private static lastFocusCheck = 0;
+  private static lastCheck = 0;
   private static backgroundStarted = false;
 
   private static getVersion(): number {
@@ -62,7 +71,25 @@ export class RemoteSync {
     return raw ? JSON.parse(raw) : null;
   }
 
-  private static async request(method: 'GET' | 'PUT', body?: unknown): Promise<Response> {
+  /** Data as it was the last time this browser synced with the server (common ancestor for merging). */
+  private static getBase(): any | null {
+    try {
+      const raw = localStorage.getItem(BASE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static setBase(data: any): void {
+    localStorage.setItem(BASE_KEY, JSON.stringify(data));
+  }
+
+  private static emitRemoteUpdated(): void {
+    window.dispatchEvent(new CustomEvent(REMOTE_UPDATED_EVENT));
+  }
+
+  private static async request(method: 'GET' | 'PUT', body?: unknown, query = ''): Promise<Response> {
     const token = AuthService.getIdToken();
     if (!token) {
       // Session expired: local data is kept (dirty flag stays), user signs in again
@@ -71,7 +98,7 @@ export class RemoteSync {
       throw new Error('AUTH_EXPIRED');
     }
 
-    const res = await fetch(API_URL, {
+    const res = await fetch(`${API_URL}${query}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -92,8 +119,12 @@ export class RemoteSync {
     return res;
   }
 
-  private static async fetchRemote(): Promise<RemoteDoc> {
-    const res = await this.request('GET');
+  /**
+   * @param since when given and the server is still at that version, the server answers
+   *              { unchanged: true } without the data (cheap polling)
+   */
+  private static async fetchRemote(since?: number): Promise<RemoteDoc> {
+    const res = await this.request('GET', undefined, since === undefined ? '' : `?since=${since}`);
     if (!res.ok) throw new Error('SYNC_FAILED');
     return (await res.json()) as RemoteDoc;
   }
@@ -101,6 +132,7 @@ export class RemoteSync {
   private static applyRemote(remote: RemoteDoc): void {
     localStorage.setItem(DATA_KEY, JSON.stringify(remote.data));
     localStorage.setItem(VERSION_KEY, String(remote.version));
+    this.setBase(remote.data);
     localStorage.removeItem(DIRTY_KEY);
   }
 
@@ -108,18 +140,66 @@ export class RemoteSync {
    * Send local data to the server based on the currently known server version.
    */
   private static async push(): Promise<void> {
-    const data = this.getLocalData();
-    if (!data) return;
+    const raw = localStorage.getItem(DATA_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+
+    // Nothing changed since the last sync: nothing to send
+    const base = this.getBase();
+    if (base && localStorage.getItem(VERSION_KEY) !== null && sameValue(base, data)) {
+      localStorage.removeItem(DIRTY_KEY);
+      return;
+    }
 
     const res = await this.request('PUT', { baseVersion: this.getVersion(), data });
     if (res.ok) {
       const result = (await res.json()) as { version: number };
       localStorage.setItem(VERSION_KEY, String(result.version));
-      localStorage.removeItem(DIRTY_KEY);
+      this.setBase(data);
+      // Only clear the flag if nothing new was saved while the request was in flight
+      if (localStorage.getItem(DATA_KEY) === raw) localStorage.removeItem(DIRTY_KEY);
       return;
     }
     if (res.status === 409) throw new ConflictError();
     throw new Error('SYNC_FAILED');
+  }
+
+  /**
+   * Somebody else saved first: merge their latest data with the local changes (record by record).
+   * Returns true when the merge brought in changes from other users.
+   */
+  private static async mergeWithRemote(): Promise<boolean> {
+    const remote = await this.fetchRemote();
+    const local = this.getLocalData();
+    localStorage.setItem(VERSION_KEY, String(remote.version));
+
+    if (remote.data == null || !local) return false;
+
+    const merged = mergeData(this.getBase(), local, remote.data);
+    const pulledChanges = !sameValue(merged, local);
+
+    localStorage.setItem(DATA_KEY, JSON.stringify(merged));
+    this.setBase(remote.data);
+    localStorage.setItem(DIRTY_KEY, '1');
+    return pulledChanges;
+  }
+
+  /**
+   * Push local changes, merging with newer server data when needed.
+   * Returns true when data from other users was merged in (the UI should refresh).
+   */
+  private static async syncNow(): Promise<boolean> {
+    let pulled = false;
+    for (let attempt = 1; attempt <= MAX_SYNC_ATTEMPTS; attempt++) {
+      try {
+        await this.push();
+        return pulled;
+      } catch (error) {
+        if (!(error instanceof ConflictError) || attempt === MAX_SYNC_ATTEMPTS) throw error;
+        pulled = (await this.mergeWithRemote()) || pulled;
+      }
+    }
+    return pulled;
   }
 
   /**
@@ -138,7 +218,7 @@ export class RemoteSync {
     // use this browser to seed the shared document.
     if (!remoteHasData && hasMeaningfulData(local) && neverSynced) {
       localStorage.setItem(VERSION_KEY, String(remote.version));
-      await this.push();
+      await this.syncNow();
       return;
     }
 
@@ -147,22 +227,16 @@ export class RemoteSync {
       return;
     }
 
-    // Unsynced local changes (e.g. session expired before they were sent)
+    // Unsynced local changes (e.g. the tab was closed before they were sent): merge, never discard
     if (this.isDirty() && local) {
-      if (remote.version === this.getVersion()) {
-        await this.push();
-        return;
-      }
-      const keepServer = window.confirm(
-        'This browser has changes that were not saved to the server, and someone else changed the data meanwhile.\n\n' +
-          'OK = load the latest server data (discard the unsaved local changes)\n' +
-          'Cancel = overwrite the server with the local data'
-      );
-      if (!keepServer) {
+      if (remote.version !== this.getVersion()) {
+        const merged = mergeData(this.getBase(), local, remote.data);
+        localStorage.setItem(DATA_KEY, JSON.stringify(merged));
         localStorage.setItem(VERSION_KEY, String(remote.version));
-        await this.push();
-        return;
+        this.setBase(remote.data);
       }
+      await this.syncNow();
+      return;
     }
 
     this.applyRemote(remote);
@@ -185,28 +259,19 @@ export class RemoteSync {
     }
     this.pushing = true;
     try {
-      await this.push();
+      const pulled = await this.syncNow();
+      if (pulled) this.emitRemoteUpdated();
     } catch (error) {
-      if (error instanceof ConflictError) {
-        try {
-          const remote = await this.fetchRemote();
-          this.applyRemote(remote);
-          window.alert('Another user saved changes at the same time. The latest shared data was loaded, please repeat your last change.');
-          window.location.reload();
-        } catch (inner) {
-          console.error('Conflict recovery failed:', inner);
-        }
-      } else {
-        // Network or server problem: data stays local and dirty, retried on next save / reconnect
-        console.error('Sync failed (will retry):', error);
-      }
+      // Network or server problem: data stays local and dirty, retried on next save / reconnect
+      console.error('Sync failed (will retry):', error);
     } finally {
       this.pushing = false;
     }
   }
 
   /**
-   * Retry pending pushes when back online and pick up other users' changes when the tab regains focus.
+   * Retry pending pushes when back online and pick up other users' changes
+   * when the tab regains focus and every few minutes while it is visible.
    */
   public static startBackgroundSync(): void {
     if (!this.enabled || this.backgroundStarted) return;
@@ -218,16 +283,24 @@ export class RemoteSync {
 
     const checkForUpdates = async () => {
       if (document.visibilityState !== 'visible') return;
-      if (this.pushing || this.isDirty()) return;
+      if (this.pushing) return;
       const now = Date.now();
-      if (now - this.lastFocusCheck < FOCUS_CHECK_MIN_INTERVAL_MS) return;
-      this.lastFocusCheck = now;
+      if (now - this.lastCheck < FOCUS_CHECK_MIN_INTERVAL_MS) return;
+      this.lastCheck = now;
+
+      if (this.isDirty()) {
+        // Pending local changes: sending them also merges any newer server data
+        void this.flush();
+        return;
+      }
+
       try {
-        const remote = await this.fetchRemote();
-        if (remote.data != null && remote.version > this.getVersion()) {
-          this.applyRemote(remote);
-          window.location.reload();
-        }
+        const remote = await this.fetchRemote(this.getVersion());
+        if (remote.unchanged || remote.data == null || remote.version <= this.getVersion()) return;
+        // Something was saved locally while we were asking: the next push will merge instead
+        if (this.isDirty()) return;
+        this.applyRemote(remote);
+        this.emitRemoteUpdated();
       } catch (error) {
         console.error('Update check failed:', error);
       }
@@ -235,6 +308,7 @@ export class RemoteSync {
 
     window.addEventListener('focus', () => void checkForUpdates());
     document.addEventListener('visibilitychange', () => void checkForUpdates());
+    window.setInterval(() => void checkForUpdates(), POLL_INTERVAL_MS);
   }
 }
 
